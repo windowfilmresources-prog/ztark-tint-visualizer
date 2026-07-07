@@ -16,6 +16,9 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 // (Alternate: assets/models/carconcept.glb — Khronos Car Concept, CC BY 4.0, named glass
 // zones front/rear/windshield — a canopy-style hypercar, structure-perfect but side glass
 // is too small to demo tint well.)
+// ?car=proc switches to the in-code procedural brandless sedan (js/procar.js)
+const USE_PROC = new URLSearchParams(location.search).get("car") === "proc";
+
 const MODEL = window.CAR3D_MODEL || {
   // car.glb is the Draco-compressed build artifact (created on Render at deploy);
   // scene.gltf is the raw fallback for local dev where the build step hasn't run.
@@ -177,7 +180,12 @@ function prepareCar(root) {
     parent.remove(glass);
   });
 
-  // normalize size + rest on ground, centered
+  normalizeCar(root);
+  return { bodyMats, frontGlassMat, rearGlassMat, fixedGlassMat, hasBakedShadow };
+}
+
+// normalize size + rest on ground, centered
+function normalizeCar(root) {
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   const scale = 4.5 / Math.max(size.x, size.z);
@@ -187,8 +195,6 @@ function prepareCar(root) {
   root.position.x -= center.x;
   root.position.z -= center.z;
   root.position.y -= box2.min.y;
-
-  return { bodyMats, frontGlassMat, rearGlassMat, fixedGlassMat, hasBakedShadow };
 }
 
 // soft radial contact shadow (model-independent)
@@ -273,6 +279,27 @@ function mount(container) {
   // let vertical swipes scroll the page on touch; horizontal drags still rotate the car
   renderer.domElement.style.touchAction = "pan-y";
 
+  if (USE_PROC) {
+    import(`./procar.js?ts=${Date.now()}`).then(({ buildCar }) => {
+      const built = buildCar();
+      normalizeCar(built.group);
+      scene.add(built.group);
+      Object.assign(state, {
+        bodyMats: built.bodyMats,
+        frontGlassMat: built.frontGlassMat,
+        rearGlassMat: built.rearGlassMat,
+        fixedGlassMat: built.fixedGlassMat,
+      });
+      state.carReady = true;
+      loadingEl.classList.add("done");
+      window.VIEWER3D.credit = ""; // ours — no attribution needed
+      document.dispatchEvent(new Event("viewer3d-car-loaded"));
+    }).catch(() => {
+      loadingEl.querySelector(".pct").textContent = "Couldn't build the 3D model";
+      document.dispatchEvent(new Event("viewer3d-unavailable"));
+    });
+  }
+
   const draco = new DRACOLoader().setDecoderPath("vendor/draco/");
   const loader = new GLTFLoader().setDRACOLoader(draco);
   const urls = MODEL.urls || [MODEL.url];
@@ -300,7 +327,7 @@ function mount(container) {
       document.dispatchEvent(new Event("viewer3d-unavailable"));
     }
   );
-  tryLoad(0);
+  if (!USE_PROC) tryLoad(0);
 
   Object.assign(state, { renderer, scene, camera, controls });
 
@@ -339,6 +366,15 @@ window.VIEWER3D = {
     if (state.rearGlassMat) state.rearGlassMat.color.setScalar(tintScalar(rearVlt ?? frontVlt));
   },
   setView(x, y, z) { if (state.camera) { state.camera.position.set(x, y, z); state.controls.update(); } },
+  snapshot(w = 900, q = 0.82) { // render + read pixels directly off the GL canvas (works in background tabs)
+    if (!state.renderer) return null;
+    state.renderer.render(state.scene, state.camera);
+    const src = state.renderer.domElement;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = Math.round(w * src.height / src.width);
+    c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", q);
+  },
   debugGlass() {
     const g = (m) => m ? m.color.getHexString() : null;
     return { front: g(state.frontGlassMat), rear: g(state.rearGlassMat), fixed: g(state.fixedGlassMat) };
