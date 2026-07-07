@@ -1,0 +1,4 @@
+.DS_Store
+nohup.out
+*.log
+web/assets/models/corvette/car.glb

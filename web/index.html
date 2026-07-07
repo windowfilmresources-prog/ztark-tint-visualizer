@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Window Tint Visualizer</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header>
+    <div id="brandLogo"></div>
+    <div class="page-title" id="pageTitle">Tint Visualizer</div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="eyebrow" id="heroEyebrow"></div>
+      <h1 id="heroTitle"></h1>
+      <p class="hero-sub" id="heroSub"></p>
+    </div>
+  </section>
+
+  <main>
+    <!-- stage -->
+    <section class="stage-wrap">
+      <div class="stage" id="stage"></div>
+      <div class="stage-tools">
+        <div class="group"><span class="group-label">Vehicle</span><span id="vehTabs" class="group"></span></div>
+        <div class="group"><span class="group-label">Paint</span><span id="paints" class="group"></span></div>
+        <div class="group">
+          <button id="dayNight" class="toggle-btn">☀ Day</button>
+          <button id="holdCompare" class="toggle-btn" title="Press and hold to see factory glass">Hold: factory glass</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- controls -->
+    <section class="panel">
+      <div class="card">
+        <h2>Film Series</h2>
+        <div class="series-tabs" id="seriesTabs"></div>
+        <div class="series-desc" id="seriesDesc"></div>
+        <span class="series-tech" id="seriesTech"></span>
+      </div>
+
+      <div class="card">
+        <h2>Shade</h2>
+        <div class="zone-tabs" id="zoneTabs"></div>
+        <div class="shade-chips" id="shadeChips"></div>
+        <div class="zone-current" id="zoneCurrent"></div>
+      </div>
+
+      <div class="card">
+        <h2>Performance</h2>
+        <div class="specs" id="specs"></div>
+        <div class="specs-note" id="specsNote"></div>
+      </div>
+
+      <div class="card">
+        <h2>Is it legal in your state?</h2>
+        <select class="law-select" id="lawSelect"></select>
+        <div class="law-rows" id="lawRows"></div>
+        <div class="law-note" id="lawNote"></div>
+      </div>
+
+      <div class="card">
+        <div class="cta-tagline" id="ctaTagline"></div>
+        <a class="cta-btn" id="dealerBtn" href="#" target="_top">Find a Dealer</a>
+      </div>
+    </section>
+  </main>
+
+  <footer id="disclaimer"></footer>
+
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
+  </script>
+  <script type="module" src="js/viewer3d.js"></script>
+  <script src="js/vehicles.js"></script>
+  <script src="js/photocars.js"></script>
+  <script src="js/tintlaws.js"></script>
+  <script src="js/brands.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
