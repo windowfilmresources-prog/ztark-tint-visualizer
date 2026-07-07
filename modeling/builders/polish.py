@@ -184,19 +184,20 @@ def cyl(name, loc, r, depth, mat, rot=(math.pi / 2, 0, 0), verts=48, smooth=True
 
 # station: (x, ymax, ztop, zbot, zrocker, zbelt)
 BODY_STATIONS = [
-    ( 2.40, 0.720, 0.772, 0.260, 0.330, 0.640),
-    ( 2.32, 0.810, 0.782, 0.195, 0.260, 0.665),
-    ( 2.10, 0.870, 0.795, 0.150, 0.180, 0.700),
-    ( 1.85, 0.895, 0.808, 0.135, 0.165, 0.725),
-    ( 1.40, 0.910, 0.822, 0.130, 0.160, 0.755),
+    ( 2.40, 0.720, 0.800, 0.260, 0.330, 0.640),
+    ( 2.32, 0.810, 0.815, 0.195, 0.260, 0.665),
+    ( 2.10, 0.870, 0.827, 0.150, 0.180, 0.700),
+    ( 1.85, 0.895, 0.833, 0.135, 0.165, 0.725),
+    ( 1.40, 0.910, 0.838, 0.130, 0.160, 0.755),
     ( 0.85, 0.920, 0.845, 0.130, 0.160, 0.778),
     ( 0.20, 0.920, 0.848, 0.130, 0.160, 0.785),
     (-0.60, 0.920, 0.852, 0.130, 0.160, 0.790),
     (-1.35, 0.915, 0.852, 0.130, 0.160, 0.795),
-    (-1.85, 0.895, 0.850, 0.140, 0.170, 0.790),
-    (-2.20, 0.860, 0.850, 0.170, 0.220, 0.775),
-    (-2.37, 0.820, 0.820, 0.240, 0.300, 0.710),
-    (-2.46, 0.750, 0.760, 0.290, 0.340, 0.660),
+    (-1.70, 0.905, 0.852, 0.130, 0.160, 0.792),
+    (-2.00, 0.885, 0.850, 0.135, 0.165, 0.788),
+    (-2.25, 0.855, 0.846, 0.150, 0.190, 0.778),
+    (-2.40, 0.815, 0.834, 0.220, 0.280, 0.758),
+    (-2.46, 0.760, 0.800, 0.280, 0.330, 0.732),
 ]
 
 
@@ -206,9 +207,11 @@ def body_ring(st):
         (x, 0.0,        zb),
         (x, 0.60 * ym,  zb),
         (x, 0.94 * ym,  zrk),
-        (x, 0.995 * ym, lerp(zrk, zbelt, 0.42)),
-        (x, 1.00 * ym,  lerp(zrk, zbelt, 0.78)),
-        (x, 0.99 * ym,  zbelt),
+        (x, 0.984 * ym, lerp(zrk, zbelt, 0.38)),
+        (x, 1.016 * ym, lerp(zrk, zbelt, 0.52)),   # bodyside character line crest
+        (x, 0.988 * ym, lerp(zrk, zbelt, 0.66)),   # shadow pocket above the line
+        (x, 1.000 * ym, lerp(zrk, zbelt, 0.86)),
+        (x, 0.988 * ym, zbelt),                    # beltline crease
         (x, 0.84 * ym,  zbelt + 0.055),
         (x, 0.0,        ztop),
     ]
@@ -217,8 +220,8 @@ def body_ring(st):
 def build_body(m):
     rings = [body_ring(s) for s in BODY_STATIONS]
     bm = loft('Body', rings,
-              long_creases={2: 0.75, 5: 0.80, 6: 0.30},
-              ring_creases={0: 0.85, 1: 0.50, len(rings) - 2: 0.50,
+              long_creases={2: 0.75, 4: 1.0, 5: 0.35, 7: 1.0, 8: 0.30},
+              ring_creases={0: 0.85, 1: 0.50, len(rings) - 2: 0.65,
                             len(rings) - 1: 0.85})
     body = obj_from_bm('Body', bm, [m['paint'], m['trim']])
     mirror_subsurf(body, 2)
@@ -272,10 +275,10 @@ CAB_STATIONS = [
     ( 0.80, 0.996, 0.880),
     ( 0.45, 1.206, 0.878),
     ( 0.12, 1.405, 0.875),   # windshield header (crease)
-    (-0.40, 1.420, 0.872),   # roof crown
-    (-0.88, 1.415, 0.868),   # rear header (crease)
-    (-1.30, 1.135, 0.860),
-    (-1.72, 0.855, 0.850),   # backlight base at the rear deck
+    (-0.38, 1.420, 0.872),   # roof crown
+    (-0.80, 1.415, 0.868),   # rear header (crease)
+    (-1.15, 1.145, 0.860),
+    (-1.52, 0.860, 0.850),   # backlight base at the rear deck
 ]
 CAB_RING_CREASES = {0: 0.55, 3: 0.70, 5: 0.70, 7: 0.55}
 
@@ -297,12 +300,12 @@ def cab_ring(st):
 
 WS_B = Vector((1.05, 0, 0.845))   # windshield base (center) — on station line
 WS_T = Vector((0.12, 0, 1.405))   # windshield top
-RW_B = Vector((-1.72, 0, 0.855))  # rear window base
-RW_T = Vector((-0.88, 0, 1.415))  # rear window top
+RW_B = Vector((-1.52, 0, 0.860))  # rear window base
+RW_T = Vector((-0.80, 0, 1.415))  # rear window top
 
 # side DLO polys (x, z); front edges run parallel to the pillar planes
 SIDE_F = [(0.89, 0.870), (0.275, 1.240), (0.02, 1.240), (0.02, 0.870)]
-SIDE_R = [(-0.08, 0.870), (-0.08, 1.240), (-1.04, 1.240), (-1.30, 0.870)]
+SIDE_R = [(-0.08, 0.870), (-0.08, 1.240), (-0.90, 1.240), (-1.14, 0.870)]
 
 
 def plane_axes(B, T):
@@ -466,10 +469,10 @@ def build_interior(m):
         box('SeatBack', (-0.44, y, 1.11), (0.16, 0.50, 0.40), mi,
             rot=(0, math.radians(-10), 0), bevel=0.04)
     # rear bench
-    box('RearCushion', (-1.05, 0, 0.93), (0.55, 1.10, 0.15), mi, bevel=0.04)
-    box('RearBack', (-1.15, 0, 1.00), (0.16, 1.10, 0.28), mi,
+    box('RearCushion', (-0.98, 0, 0.93), (0.55, 1.10, 0.15), mi, bevel=0.04)
+    box('RearBack', (-1.06, 0, 0.98), (0.16, 1.10, 0.26), mi,
         rot=(0, math.radians(-14), 0), bevel=0.04)
-    box('ParcelShelf', (-1.42, 0, 0.825), (0.40, 1.20, 0.02), mi)
+    box('ParcelShelf', (-1.32, 0, 0.825), (0.36, 1.20, 0.02), mi)
 
 
 # ---------------------------------------------------------------- wheels
@@ -489,7 +492,7 @@ def caliper_mat():
 WHEEL_R = 0.355        # tire radius (target)
 AXLE_Z = 0.355
 TIRE_W = 0.245
-TIRE_YC = 0.755        # outer face 0.8775 -> ~1-2cm inboard of the fender
+TIRE_YC = 0.788        # outer face 0.8775 -> ~1-2cm inboard of the fender
 
 
 def lathe_tire(name, x, yc, mat):
@@ -636,7 +639,8 @@ def tune_mats(m):
 
 
 def radial_band(name, bvh, cx, z0, z1, a0, a1, peak, mat,
-                nz=5, na=16, sink=0.012, both=False, thick=0.012):
+                nz=5, na=16, sink=0.012, both=False, thick=0.012,
+                ez=0.30, ea=0.15):
     """Shrink-wrapped band: rays fan out from the (cx,0) axis in plan, hit the
     body, verts offset along the surface normal.  Edges sink into the body so
     the band reads as sculpted volume, not a floating slab.  a=0 faces +X for
@@ -664,7 +668,7 @@ def radial_band(name, bvh, cx, z0, z1, a0, a1, peak, mat,
                 def ew(t, frac):
                     v = clamp(min(t, 1.0 - t) / frac, 0.0, 1.0)
                     return v * v * (3.0 - 2.0 * v)
-                w = ew(tz, 0.30) * ew(ta, 0.15)
+                w = ew(tz, ez) * ew(ta, ea)
                 row.append(bm.verts.new(hit + n * lerp(-sink, peak, w)))
             grid.append(row)
         for ra, rb in zip(grid, grid[1:]):
@@ -721,24 +725,117 @@ def cut_recess(body, x_probe, dirx, y_half, z0, z1, depth, m, probe_ys):
     return back
 
 
+def groove(body, samples, wdir, half_w=0.0035, depth=0.018, out=0.045,
+           name='Groove'):
+    """Boolean a shutline groove into the body.  samples = [(origin, dir)]
+    rays; the cutter is a thin tube that follows the hit surface, extending
+    `out` outside and `depth` inside along each ray."""
+    bvh = make_bvh(body)
+    pts = []
+    for o, d in samples:
+        dv = Vector(d).normalized()
+        hit, _, _, _ = bvh.ray_cast(Vector(o), dv, 10.0)
+        if hit is not None:
+            pts.append((hit, dv))
+    if len(pts) < 2:
+        return
+    w = Vector(wdir).normalized() * half_w
+    bm = bmesh.new()
+    rows = []
+    for p, dv in pts:
+        a = p - dv * out
+        b = p + dv * depth
+        rows.append([bm.verts.new(a - w), bm.verts.new(a + w),
+                     bm.verts.new(b + w), bm.verts.new(b - w)])
+    bm.faces.new(list(reversed(rows[0])))
+    bm.faces.new(rows[-1])
+    for r0, r1 in zip(rows, rows[1:]):
+        for i in range(4):
+            bm.faces.new([r0[i], r0[(i + 1) % 4], r1[(i + 1) % 4], r1[i]])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bool_cut(body, obj_from_bm(name, bm, [], smooth=False))
+
+
+def fan_rays(cx, z, a0, a1, n, sgn=1.0, flip=False):
+    """Horizontal ray fan from (cx, 0, z); flip mirrors around pi for the tail."""
+    out = []
+    for i in range(n):
+        a = lerp(a0, a1, i / (n - 1))
+        if flip:
+            a = math.pi - a
+        out.append(((cx, 0.0, z), (math.cos(a), sgn * math.sin(a), 0.0)))
+    return out
+
+
+def add_shutlines(body):
+    """Door / hood / trunk / bumper shutlines as ~6mm boolean grooves."""
+    X = (1, 0, 0)
+    Y = (0, 1, 0)
+    Z = (0, 0, 1)
+    # door cutlines (vertical, both sides)
+    for x0 in (0.78, 0.02, -0.75):
+        for sgn in (1, -1):
+            smp = [((x0, sgn * 1.4, lerp(0.175, 0.778, i / 13.0)), (0, -sgn, 0))
+                   for i in range(14)]
+            groove(body, smp, X, name='GrooveDoor')
+    # hood: transverse cowl line + tapered side lines
+    smp = [((1.14, lerp(-0.70, 0.70, i / 14.0), 1.4), (0, 0, -1))
+           for i in range(15)]
+    groove(body, smp, X, name='GrooveHood')
+    for sgn in (1, -1):
+        smp = [((lerp(1.12, 2.05, t), sgn * lerp(0.68, 0.58, t), 1.4),
+                (0, 0, -1)) for t in [i / 9.0 for i in range(10)]]
+        groove(body, smp, Y, name='GrooveHoodSide')
+    # trunk: transverse line + side lines
+    smp = [((-1.62, lerp(-0.72, 0.72, i / 14.0), 1.4), (0, 0, -1))
+           for i in range(15)]
+    groove(body, smp, X, name='GrooveTrunk')
+    for sgn in (1, -1):
+        smp = [((lerp(-1.60, -2.28, t), sgn * lerp(0.70, 0.56, t), 1.4),
+                (0, 0, -1)) for t in [i / 7.0 for i in range(8)]]
+        groove(body, smp, Y, name='GrooveTrunkSide')
+    # bumper-to-body cutlines wrapping nose and tail
+    groove(body, fan_rays(1.90, 0.575, -1.52, 1.52, 29), Z, name='GrooveBumpF')
+    groove(body, fan_rays(-1.85, 0.635, -1.52, 1.52, 29, flip=True), Z,
+           name='GrooveBumpR')
+
+
+def cut_lamp_recesses(body):
+    """Shallow sculpted recesses at the front corners for the light clusters."""
+    for sgn in (1, -1):
+        smp = fan_rays(1.90, 0.653, 0.70, 1.34, 12, sgn=sgn)
+        groove(body, smp, (0, 0, 1), half_w=0.058, depth=0.026, out=0.05,
+               name='LampRecess')
+
+
+def darken_recesses(body, ref_bvh, min_d=0.0045):
+    """Any face sunk below the pre-groove surface -> dark trim (groove walls,
+    groove floors, lamp recess floors)."""
+    for p in body.data.polygons:
+        loc, _, _, dist = ref_bvh.find_nearest(Vector(p.center))
+        if loc is not None and dist > min_d:
+            p.material_index = 1
+        p.use_smooth = True
+    shade_auto(body, 35)
+
+
 def front_fascia(m, bvh, grille_back):
-    # sculpted bumper mass wrapping the whole nose
-    radial_band('BumperF', bvh, 1.90, 0.295, 0.440, -1.35, 1.35, 0.030,
-                m['paint'], nz=7, na=27)
-    # wrap-around light clusters: dark housing, emissive DRL blade, clear cover
-    radial_band('LampHousingF', bvh, 1.90, 0.578, 0.690, 0.70, 1.34, 0.014,
-                m['trim'], nz=6, na=16, both=True)
-    radial_band('DRL', bvh, 1.90, 0.610, 0.658, 0.74, 1.28, 0.026,
+    # sculpted bumper mass wrapping the whole nose (below the bumper cutline)
+    radial_band('BumperF', bvh, 1.90, 0.268, 0.470, -1.38, 1.38, 0.048,
+                m['paint'], nz=8, na=33, thick=0.020, ez=0.16, ea=0.10)
+    # light clusters set INTO the boolean corner recesses: emissive DRL blade
+    # sunk below the outer skin, clear cover just inside the recess mouth
+    radial_band('DRL', bvh, 1.90, 0.632, 0.676, 0.74, 1.28, 0.014,
                 m['light_head'], nz=5, na=16, both=True, thick=0.008)
-    radial_band('LampCoverF', bvh, 1.90, 0.600, 0.668, 0.72, 1.30, 0.030,
+    radial_band('LampCoverF', bvh, 1.90, 0.618, 0.690, 0.72, 1.30, 0.021,
                 m['glass'], nz=5, na=16, both=True, thick=0.006)
     # dark mesh slats inside the grille recess
     if grille_back is not None:
         gm = mesh_mat()
-        for i in range(9):
-            y = lerp(-0.34, 0.34, i / 8.0)
-            box('GrilleSlat', (grille_back + 0.012, y, 0.517),
-                (0.018, 0.024, 0.112), gm, bevel=0.004)
+        for i in range(11):
+            y = lerp(-0.37, 0.37, i / 10.0)
+            box('GrilleSlat', (grille_back + 0.012, y, 0.506),
+                (0.018, 0.022, 0.095), gm, bevel=0.004)
     # lower valance + splitter lip
     box('ValanceF', (2.20, 0, 0.215), (0.38, 1.26, 0.17), m['trim'],
         bevel=0.045, smooth=True)
@@ -747,13 +844,13 @@ def front_fascia(m, bvh, grille_back):
 
 def rear_fascia(m, bvh, plate_back):
     # rear bumper mass
-    radial_band('BumperR', bvh, -1.85, 0.285, 0.395,
-                math.pi - 1.30, math.pi + 1.30, 0.026, m['paint'], nz=6, na=25)
-    # full-width light bar wrapping the corners, in a dark housing
-    radial_band('TailHousing', bvh, -1.85, 0.628, 0.742,
-                math.pi - 1.18, math.pi + 1.18, 0.012, m['trim'], nz=6, na=23)
-    radial_band('TailBar', bvh, -1.85, 0.648, 0.722,
-                math.pi - 1.14, math.pi + 1.14, 0.026, m['light_tail'],
+    radial_band('BumperR', bvh, -1.85, 0.255, 0.400,
+                math.pi - 1.30, math.pi + 1.30, 0.032, m['paint'], nz=6, na=25)
+    # full-width light bar just under the trunk lip, in a dark housing
+    radial_band('TailHousing', bvh, -1.85, 0.678, 0.766,
+                math.pi - 1.06, math.pi + 1.06, 0.012, m['trim'], nz=6, na=23)
+    radial_band('TailBar', bvh, -1.85, 0.694, 0.750,
+                math.pi - 1.00, math.pi + 1.00, 0.026, m['light_tail'],
                 nz=5, na=23, thick=0.008)
     # license plate sitting in its boolean recess
     if plate_back is not None:
@@ -802,13 +899,7 @@ def top_seam(name, bvh, x0, y0, y1, m, n=9):
 
 
 def build_accents(m, body_bvh, grille_back, plate_back):
-    # door seams
-    for x0 in (0.78, 0.02, -0.75):
-        seam_strip('Seam_%0.2f' % x0, body_bvh, x0, 0.19, 0.78, m)
-    # hood + trunk cutlines
-    top_seam('SeamHood', body_bvh, 1.14, -0.70, 0.70, m)
-    top_seam('SeamTrunk', body_bvh, -1.88, -0.72, 0.72, m)
-
+    # (door/hood/trunk shutlines are boolean grooves cut in build())
     # flush door handles: dark recess plate + near-flush chrome blade
     for x0 in (0.30, -0.50):
         for sgn in (1, -1):
@@ -832,7 +923,7 @@ def build_accents(m, body_bvh, grille_back, plate_back):
             m['trim'])
 
     # shark-fin antenna on the rear roof (ahead of the rear header)
-    box('Antenna', (-0.75, 0, 1.400), (0.15, 0.035, 0.055), m['trim'],
+    box('Antenna', (-0.68, 0, 1.400), (0.15, 0.035, 0.055), m['trim'],
         rot=(0, math.radians(-12), 0), bevel=0.012)
 
     # twin exhaust tips
@@ -842,7 +933,7 @@ def build_accents(m, body_bvh, grille_back, plate_back):
 
 
 def build_sill(m, cab_bvh):
-    sill_trim('SillTrim', cab_bvh, 0.86, -1.32, 0.858, m)
+    sill_trim('SillTrim', cab_bvh, 0.86, -1.18, 0.858, m)
 
 
 # ---------------------------------------------------------------- build
@@ -851,10 +942,14 @@ def build():
     m = harness.mats()
     tune_mats(m)
     body = build_body(m)
-    grille_back = cut_recess(body, 3.4, -1, 0.44, 0.452, 0.582, 0.016, m,
-                             (0.0, 0.22, 0.42))
+    grille_back = cut_recess(body, 3.4, -1, 0.40, 0.452, 0.560, 0.036, m,
+                             (0.0, 0.20, 0.36))
     plate_back = cut_recess(body, -3.4, 1, 0.31, 0.405, 0.595, 0.014, m,
                             (0.0, 0.15, 0.29))
+    ref_bvh = make_bvh(body)          # pre-groove skin for recess detection
+    cut_lamp_recesses(body)
+    add_shutlines(body)
+    darken_recesses(body, ref_bvh)
     body_bvh = make_bvh(body)
     cab, cab_bvh = build_cabin(m)
     build_glass(m, cab_bvh)
