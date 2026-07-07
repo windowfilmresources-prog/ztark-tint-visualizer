@@ -16,10 +16,22 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 // (Alternate: assets/models/carconcept.glb — Khronos Car Concept, CC BY 4.0, named glass
 // zones front/rear/windshield — a canopy-style hypercar, structure-perfect but side glass
 // is too small to demo tint well.)
-// ?car=proc switches to the in-code procedural brandless sedan (js/procar.js)
-const USE_PROC = new URLSearchParams(location.search).get("car") === "proc";
+// ?car=proc → in-code procedural sedan (js/procar.js)
+// ?car=<name> → lab model from assets/models/lab/<name>.glb (Blender pipeline output,
+//               which follows the Windshield/WindowFront*/WindowRear*/RearWindow contract)
+const CAR_PARAM = (new URLSearchParams(location.search).get("car") || "").replace(/[^a-z0-9_-]/gi, "");
+const USE_PROC = CAR_PARAM === "proc";
+const LAB_MODEL = !USE_PROC && CAR_PARAM ? {
+  url: `assets/models/lab/${CAR_PARAM}.glb`,
+  credit: "",
+  glassZones: {
+    front: ["WindowFront"],
+    rear: ["WindowRear", "RearWindow"],
+    windshield: ["Windshield"],
+  },
+} : null;
 
-const MODEL = window.CAR3D_MODEL || {
+const MODEL = LAB_MODEL || window.CAR3D_MODEL || {
   // car.glb is the Draco-compressed build artifact (created on Render at deploy);
   // scene.gltf is the raw fallback for local dev where the build step hasn't run.
   urls: ["assets/models/corvette/car.glb", "assets/models/corvette/scene.gltf"],
