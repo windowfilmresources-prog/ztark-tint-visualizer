@@ -29,7 +29,7 @@ const DEFAULT_FLEET = [
   {
     id: "sports",
     label: "Sports",
-    urls: ["assets/models/corvette/car.glb", "assets/models/corvette/scene.gltf"],
+    urls: ["assets/models/corvette/car.glb?v=1"],
     credit: "Chevrolet Corvette (C7) model © Martin Trafas · CC BY 4.0",
   },
   {
@@ -53,6 +53,7 @@ const state = {
   bodyMats: [], zoneMats: null, zoneMeshes: null,
   carRoot: null, carReady: false, container: null, loadingEl: null,
   resizeObserver: null, raycaster: new THREE.Raycaster(),
+  loadGen: 0, visible: true, intersecting: true,
 };
 
 const GLASS_RE = /glass|window|windshield|vidrio|glas[s]?_/i;
@@ -73,8 +74,12 @@ function glassMat(name) {
 }
 
 // ---------------------------------------------------------------- glass splitting
-// Split a single glass mesh into the four zones by world-space geometry.
-function splitGlass(mesh) {
+// Zone assignment must be computed over ALL glass meshes together: a mesh holding
+// only the back window would otherwise treat its own steep glass as "the windshield".
+// analyzeGlass() scans every glass mesh once and returns the shared frame of
+// reference; splitGlass() then classifies one mesh's triangles against it.
+
+function meshTris(mesh) {
   mesh.updateWorldMatrix(true, false);
   const mw = mesh.matrixWorld;
   const nMat = new THREE.Matrix3().getNormalMatrix(mw);
@@ -82,9 +87,7 @@ function splitGlass(mesh) {
   const pos = geo.getAttribute("position");
   const norm = geo.getAttribute("normal");
   const uv = geo.getAttribute("uv");
-
   const v = new THREE.Vector3(), n = new THREE.Vector3();
-  const bb = new THREE.Box3();
   const tris = [];
   for (let i = 0; i < pos.count; i += 3) {
     let ny = 0;
@@ -94,34 +97,48 @@ function splitGlass(mesh) {
       ny += n.y;
       v.set(pos.getX(j), pos.getY(j), pos.getZ(j)).applyMatrix4(mw);
       cen.add(v);
-      bb.expandByPoint(v);
     }
     tris.push({ i, ny: Math.abs(ny / 3), cen: cen.multiplyScalar(1 / 3) });
   }
+  return { tris, pos, norm, uv };
+}
 
+function analyzeGlass(meshes) {
+  const bb = new THREE.Box3();
+  const all = [];
+  const perMesh = new Map();
+  meshes.forEach((m) => {
+    const data = meshTris(m);
+    perMesh.set(m, data);
+    data.tris.forEach((t) => { bb.expandByPoint(t.cen); all.push(t); });
+  });
   const size = bb.getSize(new THREE.Vector3());
   const center = bb.getCenter(new THREE.Vector3());
   const axis = size.x > size.z ? "x" : "z";
-  const steep = tris.filter((t) => t.ny >= 0.6);
-  const wsMean = steep.length ? steep.reduce((s, t) => s + t.cen[axis], 0) / steep.length : center[axis];
-  const frontSign = Math.sign(wsMean - center[axis]) || 1;
+  const steep = all.filter((t) => t.ny >= 0.6);
+  // the windshield is the LARGER steep cluster; find both clusters and pick front by area
+  const fwd = steep.filter((t) => t.cen[axis] >= center[axis]);
+  const bwd = steep.filter((t) => t.cen[axis] < center[axis]);
+  const frontSign = fwd.length >= bwd.length ? 1 : -1;
+  const wsCluster = frontSign > 0 ? fwd : bwd;
   let wsRearEdge = center[axis];
-  steep.forEach((t) => {
-    const towardRear = -frontSign;
-    if (Math.sign(t.cen[axis] - center[axis]) === frontSign || t.cen[axis] === center[axis]) {
-      if ((t.cen[axis] - wsRearEdge) * towardRear > 0) wsRearEdge = t.cen[axis];
-    }
+  wsCluster.forEach((t) => {
+    if ((t.cen[axis] - wsRearEdge) * -frontSign > 0) wsRearEdge = t.cen[axis];
   });
   const boundary = wsRearEdge + -frontSign * size[axis] * 0.06;
+  return { axis, center, frontSign, boundary, perMesh };
+}
 
+function splitGlass(mesh, frame) {
+  const { axis, center, frontSign, boundary } = frame;
+  const { tris, pos, norm, uv } = frame.perMesh.get(mesh);
   const buckets = { windshield: [], front: [], rear: [], back: [] };
   tris.forEach((t) => {
-    const onFrontHalf = Math.sign(t.cen[axis] - center[axis]) === frontSign;
+    const onFrontHalf = Math.sign(t.cen[axis] - center[axis]) === frontSign || t.cen[axis] === center[axis];
     const forwardOfBoundary = (t.cen[axis] - boundary) * frontSign > 0;
     if (t.ny >= 0.6) (onFrontHalf ? buckets.windshield : buckets.back).push(t.i);
     else (forwardOfBoundary ? buckets.front : buckets.rear).push(t.i);
   });
-
   const build = (idxs) => {
     if (!idxs.length) return null;
     const p = [], nn = [], u = [];
@@ -225,20 +242,24 @@ function prepareCar(root, cfg) {
     }
   }
 
-  // No named zones: split generic glass meshes into the four zones by geometry.
-  glassMeshes.forEach((glass) => {
-    const parts = splitGlass(glass);
-    const parent = glass.parent;
-    ZONES.forEach((z) => {
-      const g = parts[z];
-      if (!g) return;
-      const mesh = new THREE.Mesh(g, zoneMats[z]);
-      mesh.position.copy(glass.position); mesh.rotation.copy(glass.rotation); mesh.scale.copy(glass.scale);
-      parent.add(mesh);
-      zoneMeshes[z].push(mesh);
+  // No named zones: split generic glass meshes into the four zones by geometry,
+  // classified against ONE shared frame computed over all glass together.
+  if (glassMeshes.length) {
+    const frame = analyzeGlass(glassMeshes);
+    glassMeshes.forEach((glass) => {
+      const parts = splitGlass(glass, frame);
+      const parent = glass.parent;
+      ZONES.forEach((z) => {
+        const g = parts[z];
+        if (!g) return;
+        const mesh = new THREE.Mesh(g, zoneMats[z]);
+        mesh.position.copy(glass.position); mesh.rotation.copy(glass.rotation); mesh.scale.copy(glass.scale);
+        parent.add(mesh);
+        zoneMeshes[z].push(mesh);
+      });
+      parent.remove(glass);
     });
-    parent.remove(glass);
-  });
+  }
 
   normalizeCar(root);
   return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow };
@@ -256,14 +277,27 @@ function normalizeCar(root) {
   root.position.y -= box2.min.y;
 }
 
+function disposeRoot(root) {
+  if (!root) return;
+  state.scene.remove(root);
+  const disposedMats = new Set();
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry && o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => {
+      if (!m || disposedMats.has(m)) return;
+      disposedMats.add(m);
+      // dispose every texture slot the material holds
+      Object.values(m).forEach((v) => { if (v && v.isTexture) v.dispose(); });
+      m.dispose();
+    });
+  });
+}
+
 function disposeCar() {
   if (!state.carRoot) return;
-  state.scene.remove(state.carRoot);
-  state.carRoot.traverse((o) => {
-    if (o.isMesh) {
-      o.geometry && o.geometry.dispose();
-    }
-  });
+  disposeRoot(state.carRoot);
   state.carRoot = null;
   state.carReady = false;
 }
@@ -302,18 +336,26 @@ function setLoading(text, spinning = true) {
   }
 }
 
+// One shared Draco decoder for the app's lifetime (a new one per load leaks worker pools).
+let _draco = null;
+function dracoLoader() {
+  if (!_draco) _draco = new DRACOLoader().setDecoderPath("vendor/draco/");
+  return _draco;
+}
+
 function loadCar(cfg) {
-  disposeCar();
+  // Generation token: only the most recent request may touch the scene/state.
+  // The old car stays visible until its replacement has actually arrived.
+  const gen = ++state.loadGen;
   setLoading("LOADING");
 
+  const isStale = () => gen !== state.loadGen;
+
   const done = (root, prep) => {
-    if (prep.hasBakedShadow) {
-      const fb = state.scene.getObjectByName("FallbackShadow");
-      if (fb) fb.visible = false;
-    } else {
-      const fb = state.scene.getObjectByName("FallbackShadow");
-      if (fb) fb.visible = true;
-    }
+    if (isStale()) { disposeRoot(root); return; }
+    disposeCar(); // swap: remove the outgoing car only now
+    const fb = state.scene.getObjectByName("FallbackShadow");
+    if (fb) fb.visible = !prep.hasBakedShadow;
     state.scene.add(root);
     Object.assign(state, {
       carRoot: root, bodyMats: prep.bodyMats,
@@ -325,8 +367,15 @@ function loadCar(cfg) {
     document.dispatchEvent(new Event("viewer3d-car-loaded"));
   };
 
+  const fail = (msg) => {
+    if (isStale()) return; // a stale failure must not nuke a working view
+    setLoading(msg, false);
+    document.dispatchEvent(new Event("viewer3d-unavailable"));
+  };
+
   if (cfg.proc) {
     import(`./procar.js?ts=${Date.now()}`).then(({ buildCar }) => {
+      if (isStale()) return;
       const built = buildCar();
       // adapt procar's 3-mat contract to 4 zones (its fixed glass = windshield; no back split)
       const root = built.group;
@@ -338,29 +387,26 @@ function loadCar(cfg) {
       };
       normalizeCar(root);
       done(root, { bodyMats: built.bodyMats, zoneMats, zoneMeshes: { windshield: [], front: [], rear: [], back: [] }, hasBakedShadow: false });
-    }).catch(() => {
-      setLoading("Couldn't build the 3D model", false);
-      document.dispatchEvent(new Event("viewer3d-unavailable"));
-    });
+    }).catch(() => fail("Couldn't build the 3D model"));
     return;
   }
 
-  const draco = new DRACOLoader().setDecoderPath("vendor/draco/");
-  const loader = new GLTFLoader().setDRACOLoader(draco);
+  const loader = new GLTFLoader().setDRACOLoader(dracoLoader());
   const urls = cfg.urls || [cfg.url];
   const tryLoad = (i) => loader.load(
     urls[i],
     (gltf) => {
+      if (isStale()) { disposeRoot(gltf.scene); return; }
       const prep = prepareCar(gltf.scene, cfg);
       done(gltf.scene, prep);
     },
     (xhr) => {
-      if (xhr.total) setLoading(`LOADING ${Math.round((xhr.loaded / xhr.total) * 100)}%`);
+      if (!isStale() && xhr.total) setLoading(`LOADING ${Math.round((xhr.loaded / xhr.total) * 100)}%`);
     },
     () => {
+      if (isStale()) return;
       if (i + 1 < urls.length) { tryLoad(i + 1); return; }
-      setLoading("Couldn't load the 3D model", false);
-      document.dispatchEvent(new Event("viewer3d-unavailable"));
+      fail("Couldn't load the 3D model");
     }
   );
   tryLoad(0);
@@ -430,13 +476,18 @@ function mount(container) {
   window.addEventListener("resize", resize);
   resize();
 
+  // render only while BOTH the tab is visible AND the stage is on screen
   const loop = () => { controls.update(); renderer.render(scene, camera); };
-  const setRunning = (on) => renderer.setAnimationLoop(on ? loop : null);
-  setRunning(true);
-  new IntersectionObserver((entries) =>
-    setRunning(entries[0].isIntersecting && !document.hidden)
-  ).observe(container);
-  document.addEventListener("visibilitychange", () => setRunning(!document.hidden));
+  const applyRunning = () => renderer.setAnimationLoop(state.visible && state.intersecting ? loop : null);
+  applyRunning();
+  new IntersectionObserver((entries) => {
+    state.intersecting = entries[0].isIntersecting;
+    applyRunning();
+  }).observe(container);
+  document.addEventListener("visibilitychange", () => {
+    state.visible = !document.hidden;
+    applyRunning();
+  });
 
   // initial car
   const initial =
@@ -486,12 +537,16 @@ window.VIEWER3D = {
     state.camera.updateMatrixWorld();           // render loop may be paused (background tab)
     state.scene.updateMatrixWorld(true);
     state.raycaster.setFromCamera(ndc, state.camera);
-    let best = null;
-    ZONES.forEach((z) => {
-      const hits = state.raycaster.intersectObjects(state.zoneMeshes[z], false);
-      if (hits.length && (!best || hits[0].distance < best.dist)) best = { zone: z, dist: hits[0].distance };
-    });
-    return best ? best.zone : null;
+    // raycast the whole car so opaque bodywork occludes glass behind it —
+    // clicking a door must not select the window on the far side
+    if (!state.carRoot) return null;
+    const hits = state.raycaster.intersectObject(state.carRoot, true);
+    if (!hits.length) return null;
+    const hitMesh = hits[0].object;
+    for (const z of ZONES) {
+      if (state.zoneMeshes[z].includes(hitMesh)) return z;
+    }
+    return null;
   },
   // brief emissive pulse on a zone so picking feels tactile
   flashZone(zone) {

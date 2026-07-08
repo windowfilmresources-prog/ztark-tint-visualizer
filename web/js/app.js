@@ -93,7 +93,7 @@
     renderShades();
   }
   document.addEventListener("viewer3d-unavailable", abandon3D);
-  setTimeout(() => { if (MODE_3D && !window.VIEWER3D) abandon3D(); }, 4000);
+  setTimeout(() => { if (MODE_3D && !window.VIEWER3D) abandon3D(); }, 8000);
 
   // ---------- stage / vehicle ----------
   function fleet3D() {
@@ -107,7 +107,10 @@
         <div class="stage-hint" id="stageHint">Drag to rotate · Click a window to select it</div>
         <div class="photo-credit" id="modelCredit"></div>`;
       const boot = () => {
-        window.VIEWER3D.mount(document.getElementById("viewer3d"));
+        if (!MODE_3D) return; // abandon3D may have fired while the module loaded
+        const el = document.getElementById("viewer3d");
+        if (!el) return;
+        window.VIEWER3D.mount(el);
         window.VIEWER3D.setPaint(S.paint);
         wireStagePicking();
         applyTint();
@@ -158,11 +161,12 @@
     if (!el) return;
     let downAt = null;
     el.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+    el.addEventListener("pointercancel", () => { downAt = null; });
     el.addEventListener("pointerup", (e) => {
       if (!downAt) return;
       const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
       downAt = null;
-      if (moved > 6 || !window.VIEWER3D || !window.VIEWER3D.carReady) return;
+      if (moved > 10 || !window.VIEWER3D || !window.VIEWER3D.carReady) return;
       const zone = window.VIEWER3D.pickZone(e.clientX, e.clientY);
       if (!zone) return;
       S.zoneMode = zone;
@@ -215,7 +219,8 @@
   function renderStageTools() {
     const fleet = MODE_3D ? fleet3D() : FLEET2D;
     const tabs = $("vehTabs");
-    if (MODE_3D && fleet.length < 2) {
+    const carOverride = !!qs.get("car"); // ?car= lab/proc previews aren't part of the fleet
+    if (MODE_3D && (fleet.length < 2 || carOverride)) {
       tabs.parentElement.style.display = "none";
     } else {
       tabs.parentElement.style.display = "";
@@ -223,6 +228,7 @@
         `<button class="veh-btn ${v.id === S.vehicle ? "active" : ""}" data-v="${v.id}">${v.label}</button>`).join("");
       tabs.querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => {
+          if (b.dataset.v === S.vehicle) return; // already showing this vehicle
           S.vehicle = b.dataset.v;
           if (MODE_3D) { window.VIEWER3D.loadCar(S.vehicle); renderStageTools(); }
           else { renderStageTools(); renderVehicle(); }
@@ -231,7 +237,7 @@
 
     $("paints").parentElement.style.display = PHOTO_MODE ? "none" : "";
     $("paints").innerHTML = PAINTS.map(([n, c]) =>
-      `<div class="swatch ${c === S.paint ? "active" : ""}" title="${n}" data-c="${c}" style="background:${c}"></div>`).join("");
+      `<button type="button" class="swatch ${c === S.paint ? "active" : ""}" title="${n}" aria-label="Paint: ${n}" data-c="${c}" style="background:${c}"></button>`).join("");
     $("paints").querySelectorAll(".swatch").forEach((s) =>
       s.addEventListener("click", () => {
         S.paint = s.dataset.c;
@@ -245,6 +251,8 @@
   const setCompare = (on) => { S.comparing = on; applyTint(); };
   ["mousedown", "touchstart"].forEach((e) => hold.addEventListener(e, (ev) => { ev.preventDefault(); setCompare(true); }));
   ["mouseup", "mouseleave", "touchend", "touchcancel", "blur"].forEach((e) => hold.addEventListener(e, () => setCompare(false)));
+  hold.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); setCompare(true); } });
+  hold.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") setCompare(false); });
 
   // ---------- products ----------
   function series() { return BRAND.products[S.series]; }
@@ -304,7 +312,10 @@
   function renderZoneBar() {
     const el = $("zoneBar");
     if (!el) return;
-    const zones = [["all", "All windows"], ...ZONES.map((z) => [z, ZONE_LABELS[z]])];
+    // 2D fallback art only models side glass — offer only the zones that do something
+    const zoneIds = MODE_3D ? ZONES : ["front", "rear"];
+    if (!MODE_3D && !zoneIds.includes(S.zoneMode) && S.zoneMode !== "all") S.zoneMode = "all";
+    const zones = [["all", "All windows"], ...zoneIds.map((z) => [z, ZONE_LABELS[z]])];
     el.innerHTML = zones.map(([z, label]) => {
       const mini = z === "all"
         ? ""
@@ -356,13 +367,19 @@
     if (!sel) {
       return `<div class="law-row"><span class="pos">Windshield</span><span class="rule">${st.windshield}</span><span class="law-badge info">Info</span></div>`;
     }
-    const ok = sel.vlt >= 70;
-    const badge = ok
-      ? `<span class="law-badge ok">Near-clear</span>`
-      : `<span class="law-badge bad">Restricted</span>`;
-    const rule = ok
-      ? `${st.windshield} — clear film generally allowed, verify locally`
-      : `${st.windshield} — shaded film not permitted in most states`;
+    const stateForbids = /no tint/i.test(st.windshield); // e.g. MN, NJ: no windshield tint at all
+    const nearClear = sel.vlt >= 70;
+    let badge, rule;
+    if (stateForbids) {
+      badge = `<span class="law-badge bad">Not permitted</span>`;
+      rule = `${st.windshield} — this state does not permit windshield film`;
+    } else if (nearClear) {
+      badge = `<span class="law-badge ok">Near-clear</span>`;
+      rule = `${st.windshield} — clear film generally allowed, verify locally`;
+    } else {
+      badge = `<span class="law-badge bad">Restricted</span>`;
+      rule = `${st.windshield} — shaded film not permitted in most states`;
+    }
     return `<div class="law-row"><span class="pos">Windshield</span><span class="rule">${rule}</span>${badge}</div>`;
   }
 
