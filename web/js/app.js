@@ -139,9 +139,13 @@
     applyTint();
   }
 
-  // every car load (including fleet swaps) re-applies paint, tint, and credit
+  // every car load (including fleet swaps) re-applies paint, tint, and credit;
+  // also (re)renders the vehicle tabs — the fleet isn't known until the module loads
   document.addEventListener("viewer3d-car-loaded", () => {
     if (!MODE_3D || !window.VIEWER3D) return;
+    const fleet = fleet3D();
+    if (fleet.length && !fleet.some((f) => f.id === S.vehicle)) S.vehicle = fleet[0].id;
+    renderStageTools();
     window.VIEWER3D.setPaint(S.paint);
     const cr = document.getElementById("modelCredit");
     if (cr) { cr.textContent = window.VIEWER3D.credit || ""; cr.style.display = window.VIEWER3D.credit ? "" : "none"; }

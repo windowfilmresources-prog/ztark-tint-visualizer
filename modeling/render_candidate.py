@@ -97,10 +97,13 @@ def normalize(objects):
             o.parent = root
     root.scale = (scale,) * 3
     center = (mins + maxs) / 2
-    root.location = (-center.x * scale, -center.y * scale, -mins.z * scale)
     # cars are usually modeled length-along-X already; if Y is longer, rotate
     if size.y > size.x:
         root.rotation_euler = (0, 0, math.radians(90))
+        # translation is applied after rotation, so rotate the centering offset too
+        root.location = (center.y * scale, -center.x * scale, -mins.z * scale)
+    else:
+        root.location = (-center.x * scale, -center.y * scale, -mins.z * scale)
     return meshes
 
 

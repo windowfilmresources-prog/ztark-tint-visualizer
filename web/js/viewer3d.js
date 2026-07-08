@@ -32,6 +32,18 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/corvette/car.glb", "assets/models/corvette/scene.gltf"],
     credit: "Chevrolet Corvette (C7) model © Martin Trafas · CC BY 4.0",
   },
+  {
+    id: "truck",
+    label: "Truck",
+    urls: ["assets/models/truck/truck.glb?v=2"], // bump ?v= when the model file changes
+    credit: "2018 Ford F-150 Lariat model © David_Holiday · CC BY 4.0",
+  },
+  {
+    id: "suv",
+    label: "SUV",
+    urls: ["assets/models/suv/suv.glb?v=2"],
+    credit: "2020 BMW X5 M model © David_Holiday · CC BY 4.0",
+  },
 ];
 
 const FLEET = window.CAR3D_FLEET || DEFAULT_FLEET;
@@ -173,6 +185,45 @@ function prepareCar(root, cfg) {
       });
     }
   });
+
+  // Paint fallback: no material name matched — take the largest-surface-area
+  // colored materials (the body shell dominates every car's exterior area).
+  if (!bodyMats.length) {
+    const area = new Map();
+    const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3();
+    root.traverse((o) => {
+      if (!o.isMesh || glassMeshes.includes(o)) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const m = mats[0];
+      if (!m || !m.color) return;
+      const g = o.geometry;
+      const pos = g.getAttribute("position");
+      if (!pos) return;
+      let a = 0;
+      const idx = g.index;
+      const count = idx ? idx.count : pos.count;
+      const step = Math.max(3, Math.floor(count / 3000) * 3); // sample large meshes
+      for (let i = 0; i + 2 < count; i += step) {
+        const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2;
+        pa.fromBufferAttribute(pos, i0); pb.fromBufferAttribute(pos, i1); pc.fromBufferAttribute(pos, i2);
+        pb.sub(pa); pc.sub(pa);
+        a += pb.cross(pc).length() / 2 * (step / 3);
+      }
+      area.set(m, (area.get(m) || 0) + a);
+    });
+    const ranked = [...area.entries()].sort((x, y) => y[1] - x[1]);
+    if (ranked.length) {
+      const top = ranked[0][1];
+      ranked.filter(([, a]) => a > top * 0.5).slice(0, 2).forEach(([m]) => {
+        m.map = null;
+        m.metalness = 0.15;
+        m.roughness = 0.4;
+        m.envMapIntensity = 1.15;
+        m.needsUpdate = true;
+        bodyMats.push(m);
+      });
+    }
+  }
 
   // No named zones: split generic glass meshes into the four zones by geometry.
   glassMeshes.forEach((glass) => {
