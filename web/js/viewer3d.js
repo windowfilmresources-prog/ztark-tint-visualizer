@@ -36,6 +36,7 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/corvette/car.glb?v=2"],
     credit: "Vehicle 3D model © Martin Trafas · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a",
+    plates: { front: { y: 0.40, w: 0.42 }, rear: { y: 0.72, w: 0.42 } },
   },
   {
     id: "truck",
@@ -43,6 +44,7 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/truck/truck.glb?v=4"], // bump ?v= when the model file changes
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5",
+    plates: { front: { y: 0.42, w: 0.46 }, rear: { y: 0.76, w: 0.46 } },
   },
   {
     id: "suv",
@@ -50,6 +52,7 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/suv/suv.glb?v=3"],
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
+    plates: { front: { y: 0.46, w: 0.44 }, rear: { y: 0.84, w: 0.44 } },
   },
 ];
 
@@ -296,6 +299,121 @@ function prepareCar(root, cfg) {
   return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow };
 }
 
+// ---------------------------------------------------------------- brand plates
+// Branded license plates: canvas-drawn from window.PLATE_STYLE (set by app.js
+// from the active brand config), mounted by raycasting the bumper/tailgate at
+// per-car heights. Plates live in state.plateGroup (world space), rebuilt on
+// every car load.
+function plateTexture(style) {
+  const c = document.createElement("canvas");
+  c.width = 640; c.height = 320;
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const draw = () => {
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, 640, 320);
+    const r = 34;
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 632, 312, r);
+    ctx.fillStyle = style.bg;
+    ctx.fill();
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = style.border;
+    ctx.beginPath();
+    ctx.roundRect(18, 18, 604, 284, r - 12);
+    ctx.stroke();
+    // mounting bolts
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    for (const bx of [96, 544]) { ctx.beginPath(); ctx.arc(bx, 46, 9, 0, 7); ctx.fill(); }
+    // brand text, shrunk to fit
+    ctx.fillStyle = style.fg;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    let px = 118;
+    do {
+      ctx.font = `700 ${px}px ${style.font}`;
+      if (ctx.measureText(style.text).width <= 540) break;
+      px -= 6;
+    } while (px > 40);
+    ctx.fillText(style.text, 320, style.sub ? 150 : 164);
+    if (style.sub) {
+      ctx.font = `600 30px ${style.font}`;
+      ctx.globalAlpha = 0.72;
+      ctx.fillText(style.sub, 320, 246);
+      ctx.globalAlpha = 1;
+    }
+    tex.needsUpdate = true;
+  };
+  draw();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw); // redraw once webfonts land
+  return tex;
+}
+
+function clearPlates() {
+  const g = state.plateGroup;
+  if (!g) return;
+  [...g.children].forEach((m) => {
+    g.remove(m);
+    m.geometry && m.geometry.dispose();
+    if (m.material) { m.material.map && m.material.map.dispose(); m.material.dispose(); }
+  });
+}
+
+function addPlates(cfg, prep) {
+  clearPlates();
+  const style = window.PLATE_STYLE;
+  window.__plateDebug = { style: !!style, cfgPlates: !!cfg.plates, group: !!state.plateGroup, root: !!state.carRoot, hits: [] };
+  if (!style || !cfg.plates || !state.plateGroup || !state.carRoot) return;
+  state.carRoot.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(state.carRoot);
+  const size = box.getSize(new THREE.Vector3());
+  const L = size.x >= size.z ? "x" : "z";
+  const centroid = (meshes) => {
+    if (!meshes || !meshes.length) return null;
+    const b = new THREE.Box3();
+    meshes.forEach((m) => b.expandByObject(m));
+    return b.getCenter(new THREE.Vector3());
+  };
+  const ws = centroid(prep.zoneMeshes.windshield);
+  const bk = centroid(prep.zoneMeshes.back);
+  const frontSign = ws && bk ? (Math.sign(ws[L] - bk[L]) || 1) : 1;
+
+  const bodyTargets = [];
+  state.carRoot.traverse((o) => { if (o.isMesh) bodyTargets.push(o); });
+
+  for (const side of ["front", "rear"]) {
+    const spec = cfg.plates[side];
+    if (!spec) continue;
+    const dir = side === "front" ? frontSign : -frontSign;
+    const origin = new THREE.Vector3(0, spec.y, 0);
+    origin[L] = dir * 3.4;
+    const rayDir = new THREE.Vector3(0, 0, 0);
+    rayDir[L] = -dir;
+    state.raycaster.set(origin, rayDir);
+    const hit = state.raycaster.intersectObjects(bodyTargets, false)[0];
+    window.__plateDebug.hits.push({ side, L, dir, origin: origin.toArray().map((v) => +v.toFixed(2)), hit: hit ? hit.point.toArray().map((v) => +v.toFixed(2)) : null });
+    if (!hit) continue;
+    let n = hit.face
+      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
+      : rayDir.clone().negate();
+    if (n.dot(rayDir) > 0) n.negate();
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(spec.w, spec.w / 2),
+      new THREE.MeshStandardMaterial({
+        map: plateTexture(style), roughness: 0.5, metalness: 0.1,
+        transparent: true, alphaTest: 0.5,
+      })
+    );
+    mesh.position.copy(hit.point).addScaledVector(n, 0.013);
+    mesh.up.set(0, 1, 0);
+    mesh.lookAt(mesh.position.clone().add(n)); // +Z to the surface normal, world-up kept (no mirror/roll)
+    mesh.name = "Plate_" + side;
+    state.plateGroup.add(mesh);
+  }
+}
+
 function normalizeCar(root) {
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
@@ -393,6 +511,7 @@ function loadCar(cfg) {
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
     });
     state.carReady = true;
+    addPlates(cfg, prep);
     setLoading(null);
     window.VIEWER3D.credit = cfg.credit || "";
     window.VIEWER3D.creditUrl = cfg.creditUrl || "";
@@ -526,6 +645,10 @@ function mount(container) {
   catcher.receiveShadow = true;
   scene.add(catcher);
   scene.add(contactShadow()); // faint blob kept underneath for contact darkening
+
+  state.plateGroup = new THREE.Group();
+  state.plateGroup.name = "BrandPlates";
+  scene.add(state.plateGroup);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.6, 0);
@@ -662,6 +785,15 @@ window.VIEWER3D = {
       if (o.isMesh) out.push({ mesh: o.name, parent: o.parent && o.parent.name, mat: Array.isArray(o.material) ? o.material.map(m => m.name).join("|") : o.material.name });
     });
     return out;
+  },
+  debugPlates() {
+    return {
+      group: !!state.plateGroup,
+      plates: state.plateGroup ? state.plateGroup.children.map((m) => ({
+        name: m.name, pos: m.position.toArray().map((v) => +v.toFixed(2)),
+      })) : [],
+      lastRun: window.__plateDebug || null,
+    };
   },
 };
 document.dispatchEvent(new Event("viewer3d-ready"));

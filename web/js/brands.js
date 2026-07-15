@@ -26,6 +26,7 @@ window.BRANDS = {
       sub: "See every Hüper Optik shade on your vehicle — the world's first patented nano-ceramic film, installed by an authorized dealer near you.",
     },
     defaultPaint: "#e8eaec",
+    plate: { bg: "#f6f7f5", fg: "#2b2b2b", border: "#81bd41", text: "HÜPER OPTIK", sub: "NANO-CERAMIC", font: "'Abel','Arial Narrow',sans-serif" },
     defaultShade: { seriesIdx: 0, vlt: 30, sku: 30 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://www.huperoptikusa.com/store-locator-view/", dealerCta: "Find a Dealer Near You",
@@ -100,6 +101,7 @@ window.BRANDS = {
       sub: "Preview every Autobahn film on your vehicle. Pick your shade. Own the road.",
     },
     defaultPaint: "#1a1c1f",
+    plate: { bg: "#0c0c0d", fg: "#ffffff", border: "#a91e22", text: "AUTOBAHN", sub: "NO LIMITS", font: "'Orbitron',sans-serif" },
     defaultShade: { seriesIdx: 1, vlt: 15, sku: 15 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://autobahnwindowfilms.com/dealer-locator/", dealerCta: "Find a Dealer Near You",
@@ -178,6 +180,7 @@ window.BRANDS = {
       sub: "Preview Edge window film on your vehicle — artistry, comfort, and protection, backed by hassle-free warranties.",
     },
     defaultPaint: "#1a1c1f",
+    plate: { bg: "#0d1b3d", fg: "#ffffff", border: "#ffffff", text: "EDGE", sub: "TINT · PPF · COATINGS", font: "'Gothic A1',sans-serif" },
     defaultShade: { seriesIdx: 0, vlt: 20, sku: 20 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://programedge.com/dealer-locator/", dealerCta: "Find a Dealer Near You",

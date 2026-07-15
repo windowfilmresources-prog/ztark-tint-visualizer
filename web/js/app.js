@@ -23,6 +23,7 @@
   // ---------- theme ----------
   const root = document.documentElement;
   Object.entries(BRAND.theme).forEach(([k, v]) => root.style.setProperty(k, v));
+  window.PLATE_STYLE = BRAND.plate || null; // branded license plates in the 3D viewer
   (BRAND.fontLinks || []).forEach((href) => {
     const l = document.createElement("link");
     l.rel = "stylesheet"; l.href = href;
