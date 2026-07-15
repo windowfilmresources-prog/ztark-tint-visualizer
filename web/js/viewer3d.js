@@ -310,6 +310,8 @@ function plateTexture(style) {
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 4;
   tex.colorSpace = THREE.SRGBColorSpace;
+  let img = null;
+  if (style.logo) { img = new Image(); img.src = style.logo; }
   const draw = () => {
     const ctx = c.getContext("2d");
     ctx.clearRect(0, 0, 640, 320);
@@ -326,26 +328,36 @@ function plateTexture(style) {
     // mounting bolts
     ctx.fillStyle = "rgba(0,0,0,.28)";
     for (const bx of [96, 544]) { ctx.beginPath(); ctx.arc(bx, 46, 9, 0, 7); ctx.fill(); }
-    // brand text, shrunk to fit
-    ctx.fillStyle = style.fg;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    let px = 118;
-    do {
-      ctx.font = `700 ${px}px ${style.font}`;
-      if (ctx.measureText(style.text).width <= 540) break;
-      px -= 6;
-    } while (px > 40);
-    ctx.fillText(style.text, 320, style.sub ? 150 : 164);
+    if (img && img.complete && img.naturalWidth) {
+      // real brand mark, contained; tagline below
+      const bw = 480, bh = style.sub ? 140 : 190, by = style.sub ? 62 : 66;
+      const s = Math.min(bw / img.naturalWidth, bh / img.naturalHeight);
+      const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+      ctx.drawImage(img, 320 - dw / 2, by + (bh - dh) / 2, dw, dh);
+    } else {
+      // fallback: brand text, shrunk to fit
+      ctx.fillStyle = style.fg;
+      let px = 118;
+      do {
+        ctx.font = `700 ${px}px ${style.font}`;
+        if (ctx.measureText(style.text).width <= 540) break;
+        px -= 6;
+      } while (px > 40);
+      ctx.fillText(style.text, 320, style.sub ? 150 : 164);
+    }
     if (style.sub) {
+      ctx.fillStyle = style.fg;
       ctx.font = `600 30px ${style.font}`;
       ctx.globalAlpha = 0.72;
-      ctx.fillText(style.sub, 320, 246);
+      ctx.fillText(style.sub, 320, 252);
       ctx.globalAlpha = 1;
     }
     tex.needsUpdate = true;
   };
   draw();
+  if (img) { img.onload = draw; }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw); // redraw once webfonts land
   return tex;
 }
