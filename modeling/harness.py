@@ -28,7 +28,7 @@ from mathutils import Vector
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    out = {"builder": None, "out": "modeling/out/untitled", "glb": True}
+    out = {"builder": None, "out": "modeling/out/untitled", "glb": True, "blend": False}
     i = 0
     while i < len(argv):
         if argv[i] == "--builder":
@@ -37,6 +37,8 @@ def parse_args():
             out["out"] = argv[i + 1]; i += 2
         elif argv[i] == "--no-glb":
             out["glb"] = False; i += 1
+        elif argv[i] == "--blend":
+            out["blend"] = True; i += 1
         else:
             i += 1
     return out
@@ -137,7 +139,7 @@ def aim(cam_obj, pos, target=(0, 0, 0.62)):
     cam_obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 
 
-def render_shots(out_dir):
+def render_shots(out_dir, cam_scale=1.0):
     os.makedirs(out_dir, exist_ok=True)
     scene = bpy.context.scene
     for engine in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE", "EEVEE"):
@@ -155,8 +157,9 @@ def render_shots(out_dir):
         "rear34": (-5.3, -5.3, 2.0),
         "top": (0.2, -7.2, 5.2),
     }
+    s = cam_scale
     for name, pos in shots.items():
-        aim(cam, pos)
+        aim(cam, (pos[0] * s, pos[1] * s, pos[2] if name == "side" else pos[2] * s))
         scene.render.filepath = os.path.join(out_dir, name + ".png")
         bpy.ops.render.render(write_still=True)
 
@@ -180,9 +183,12 @@ def main():
     spec.loader.exec_module(builder)
     builder.build()
 
-    render_shots(args["out"])
+    render_shots(args["out"], cam_scale=getattr(builder, "CAM_SCALE", 1.0))
     if args["glb"]:
         export_glb(os.path.join(args["out"], "car.glb"))
+    if args["blend"]:
+        bpy.ops.wm.save_as_mainfile(
+            filepath=os.path.abspath(os.path.join(args["out"], "car.blend")))
     print("HARNESS DONE:", args["out"])
 
 

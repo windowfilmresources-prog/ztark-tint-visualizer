@@ -2,3 +2,5 @@
 nohup.out
 *.log
 modeling/candidates/
+__pycache__/
+*.blend1
