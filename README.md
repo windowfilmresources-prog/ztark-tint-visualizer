@@ -67,6 +67,11 @@ trade dress. Long-term de-risk options are commissioned originals or user-photo 
 - `web/assets/cars/truck.jpg` — Nissan Frontier Pro-4X, Autosdeprimera, **CC BY 3.0** (credit shown in-app),
   https://commons.wikimedia.org/wiki/File:2021_Nissan_Frontier_Pro_4X_(Colombia;_facelift)_side_view.png
 
+- `web/assets/buildings/residential.jpg` — modern house exterior, Max Vakhtbovych, **Pexels License**
+  (free commercial use, no attribution required; credited in-app anyway), pexels.com/photo/7031607
+- `web/assets/buildings/commercial.jpg` — Redmond office building, Pixabay via Pexels, **CC0**,
+  pexels.com/photo/269077
+
 The CC-BY images are YouTube-CC-BY-sourced Commons files; consider archiving the Commons + YouTube
 pages before public launch (belt-and-suspenders on the license grant).
 

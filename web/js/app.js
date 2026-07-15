@@ -60,7 +60,16 @@
     shades: { windshield: null, front: null, rear: null, back: null },
     usState: "",
     comparing: false,
+    space: "vehicles",               // vehicles | residential | commercial
+    b: {                             // per-space architectural film selection
+      residential: { series: 0, shade: null, divider: 0.55 },
+      commercial: { series: 0, shade: null, divider: 0.55 },
+    },
   };
+
+  // Architectural mode exists only for brands with a flat-glass catalog (Hüper, Edge)
+  const BCAT = (window.BUILDINGS && window.BUILDINGS.catalogs[brandId]) || null;
+  const BSCENES = (window.BUILDINGS && window.BUILDINGS.scenes) || {};
 
   const PAINTS = [
     ["White",  "#e8eaec"], ["Silver", "#b7bcc2"], ["Gray", "#686d73"],
@@ -101,7 +110,99 @@
     return (window.VIEWER3D && window.VIEWER3D.fleet) || [];
   }
 
+  // ---------- architectural (building) stage ----------
+  function bSel() { return S.b[S.space]; }
+  function bSeries() { return BCAT.products[bSel().series]; }
+
+  function buildingFilmLayers(scene) {
+    const sel = bSel().shade;
+    const polys = scene.windows.map((w) => {
+      const pts = w.r
+        ? [[w.r[0], w.r[1]], [w.r[0] + w.r[2], w.r[1]], [w.r[0] + w.r[2], w.r[1] + w.r[3]], [w.r[0], w.r[1] + w.r[3]]]
+        : w.q;
+      return pts.map(([x, y]) => `${(x * 1000).toFixed(1)},${(y * 667).toFixed(1)}`).join(" ");
+    });
+    if (!sel) return { polys, dark: 0, refl: 0, warm: 0 };
+    return {
+      polys,
+      dark: Math.min(0.92, 1 - Math.pow(sel.vlt / 100, 0.62)),
+      refl: (sel.refl || 0) / 100 * 0.55,
+      warm: sel.tone === "warm" ? 0.16 : 0,
+    };
+  }
+
+  function renderBuilding() {
+    const scene = BSCENES[S.space];
+    const f = buildingFilmLayers(scene);
+    const d = bSel().divider;
+    $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
+      <div class="bstage" id="bstage">
+        <img src="${scene.img}" alt="${scene.label} building">
+        <svg viewBox="0 0 1000 667" preserveAspectRatio="none">
+          <defs>
+            <clipPath id="bClip"><rect id="bClipRect" x="0" y="0" width="${d * 1000}" height="667"/></clipPath>
+            <linearGradient id="bSheen" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#dfeaf4"/><stop offset="0.5" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d6e2"/>
+            </linearGradient>
+          </defs>
+          <g clip-path="url(#bClip)">
+            ${f.polys.map((p) => `<polygon class="bf-dark" points="${p}" fill="#01050a" style="mix-blend-mode:multiply" opacity="${f.dark}"/>`).join("")}
+            ${f.polys.map((p) => `<polygon class="bf-refl" points="${p}" fill="url(#bSheen)" style="mix-blend-mode:screen" opacity="${f.refl}"/>`).join("")}
+            ${f.polys.map((p) => `<polygon class="bf-warm" points="${p}" fill="#8a4a12" style="mix-blend-mode:multiply" opacity="${f.warm}"/>`).join("")}
+          </g>
+        </svg>
+        <div class="bdivider" id="bDivider" style="left:${d * 100}%">
+          <div class="bhandle" role="slider" aria-label="Comparison divider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(d * 100)}" tabindex="0">⟨ ⟩</div>
+        </div>
+        <span class="bside-label" style="left:14px;top:50px">WITH FILM</span>
+        <span class="bside-label" style="right:12px">BARE GLASS</span>
+        <div class="photo-credit">${scene.credit}</div>
+      </div>
+      <div class="stage-hint">Drag the divider to compare</div>`;
+    wireDivider();
+    renderBadge();
+  }
+
+  function updateBuildingFilm() {
+    const scene = BSCENES[S.space];
+    const f = buildingFilmLayers(scene);
+    const st = $("bstage");
+    if (!st) return;
+    st.querySelectorAll(".bf-dark").forEach((p) => p.setAttribute("opacity", f.dark));
+    st.querySelectorAll(".bf-refl").forEach((p) => p.setAttribute("opacity", f.refl));
+    st.querySelectorAll(".bf-warm").forEach((p) => p.setAttribute("opacity", f.warm));
+    renderBadge();
+  }
+
+  function wireDivider() {
+    const stage = $("bstage");
+    const div = $("bDivider");
+    if (!stage || !div) return;
+    const setPos = (clientX) => {
+      const r = stage.getBoundingClientRect();
+      const d = Math.min(0.96, Math.max(0.04, (clientX - r.left) / r.width));
+      bSel().divider = d;
+      div.style.left = d * 100 + "%";
+      const rect = stage.querySelector("#bClipRect");
+      if (rect) rect.setAttribute("width", d * 1000);
+      div.querySelector(".bhandle").setAttribute("aria-valuenow", Math.round(d * 100));
+    };
+    let dragging = false;
+    div.addEventListener("pointerdown", (e) => { dragging = true; div.setPointerCapture(e.pointerId); e.preventDefault(); });
+    div.addEventListener("pointermove", (e) => { if (dragging) setPos(e.clientX); });
+    ["pointerup", "pointercancel"].forEach((ev) => div.addEventListener(ev, () => { dragging = false; }));
+    stage.addEventListener("pointerdown", (e) => { if (e.target.tagName === "IMG" || e.target.tagName === "svg") setPos(e.clientX); });
+    div.querySelector(".bhandle").addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowLeft" ? -0.04 : e.key === "ArrowRight" ? 0.04 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const r = stage.getBoundingClientRect();
+      setPos(r.left + (bSel().divider + step) * r.width);
+    });
+  }
+
   function renderVehicle() {
+    if (S.space !== "vehicles") { renderBuilding(); return; }
     if (MODE_3D) {
       $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
         <div id="viewer3d"></div>
@@ -115,6 +216,9 @@
         window.VIEWER3D.setPaint(S.paint);
         wireStagePicking();
         applyTint();
+        // returning from a building space: the car is already loaded, so no
+        // car-loaded event will fire — re-run its listener for credit/tabs
+        if (window.VIEWER3D.credit) document.dispatchEvent(new Event("viewer3d-car-loaded"));
       };
       if (window.VIEWER3D) boot();
       else document.addEventListener("viewer3d-ready", boot, { once: true });
@@ -225,6 +329,13 @@
   function renderBadge() {
     const el = $("vltBadge");
     if (!el) return;
+    if (S.space !== "vehicles") {
+      const sel = bSel().shade;
+      el.textContent = sel
+        ? `${bSeries().name} · ${sel.name || (sel.sku ?? sel.vlt) + "%"}`
+        : "Bare glass — pick a film";
+      return;
+    }
     if (S.comparing) { el.textContent = "Factory glass (comparing)"; return; }
     const abbr = { windshield: "WS", front: "F", rear: "R", back: "B" };
     const parts = ZONES.filter((z) => S.shades[z])
@@ -232,8 +343,53 @@
     el.textContent = parts.length ? parts.join(" · ") : "Factory glass — pick a shade";
   }
 
+  // ---------- space switcher ----------
+  function enterSpace(space) {
+    if (S.space === space) return;
+    S.space = space;
+    const auto = space === "vehicles";
+    // cards that only make sense for vehicles
+    const zoneCard = $("zoneBar") && $("zoneBar").closest(".card");
+    const lawCard = $("lawSelect") && $("lawSelect").closest(".card");
+    if (zoneCard) zoneCard.style.display = auto ? "" : "none";
+    if (lawCard) lawCard.style.display = auto ? "" : "none";
+    const sub = $("heroSub");
+    if (sub) sub.textContent = auto ? (BRAND.hero.sub || "") : (BCAT.heroSub || BRAND.hero.sub || "");
+    const pt = $("pageTitle");
+    if (pt && BRAND.pageTitle) pt.textContent = auto ? BRAND.pageTitle : "Architectural Film Viewer";
+    renderStageTools();
+    renderVehicle();
+    renderSeries();
+    renderShades();
+    renderSpecs();
+  }
+
+  function renderSpaceTabs() {
+    let el = $("spaceTabs");
+    if (!BCAT) { if (el) el.parentElement.style.display = "none"; return; }
+    if (!el) {
+      const group = document.createElement("div");
+      group.className = "group";
+      group.innerHTML = `<span class="group-label">Space</span><span id="spaceTabs" class="group"></span>`;
+      const tools = document.querySelector(".stage-tools");
+      tools.insertBefore(group, tools.firstChild);
+      el = $("spaceTabs");
+    }
+    const spaces = [["vehicles", "Vehicles"], ["residential", "Residential"], ["commercial", "Commercial"]];
+    el.innerHTML = spaces.map(([id, label]) =>
+      `<button class="veh-btn ${S.space === id ? "active" : ""}" data-s="${id}">${label}</button>`).join("");
+    el.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => enterSpace(b.dataset.s)));
+  }
+
   // ---------- stage tools ----------
   function renderStageTools() {
+    renderSpaceTabs();
+    const building = S.space !== "vehicles";
+    $("vehTabs").parentElement.style.display = building ? "none" : "";
+    $("paints").parentElement.style.display = building ? "none" : "";
+    $("holdCompare").style.display = building ? "none" : "";
+    if (building) return;
     const fleet = MODE_3D ? fleet3D() : FLEET2D;
     const tabs = $("vehTabs");
     const carOverride = !!qs.get("car"); // ?car= lab/proc previews aren't part of the fleet
@@ -273,15 +429,23 @@
 
   // ---------- products ----------
   function series() { return BRAND.products[S.series]; }
+  function curSeries() { return S.space === "vehicles" ? series() : bSeries(); }
 
   function renderSeries() {
-    $("seriesTabs").innerHTML = BRAND.products.map((p, i) =>
-      `<button class="series-tab ${i === S.series ? "active" : ""}" data-i="${i}">${p.name}</button>`).join("");
+    const building = S.space !== "vehicles";
+    const products = building ? BCAT.products : BRAND.products;
+    const active = building ? bSel().series : S.series;
+    $("seriesTabs").innerHTML = products.map((p, i) =>
+      `<button class="series-tab ${i === active ? "active" : ""}" data-i="${i}">${p.name}</button>`).join("");
     $("seriesTabs").querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => { S.series = +b.dataset.i; renderSeries(); renderShades(); renderSpecs(); }));
-    $("seriesDesc").textContent = series().tagline || "";
-    $("seriesTech").textContent = series().tech || "";
-    $("seriesTech").style.display = series().tech ? "inline-block" : "none";
+      b.addEventListener("click", () => {
+        if (building) bSel().series = +b.dataset.i;
+        else S.series = +b.dataset.i;
+        renderSeries(); renderShades(); renderSpecs();
+      }));
+    $("seriesDesc").textContent = curSeries().tagline || "";
+    $("seriesTech").textContent = curSeries().tech || "";
+    $("seriesTech").style.display = curSeries().tech ? "inline-block" : "none";
   }
 
   function activeZones() {
@@ -295,6 +459,7 @@
   }
 
   function renderShades() {
+    if (S.space !== "vehicles") return renderBuildingShades();
     const cur = activeShadeVlt();
     const anySet = activeZones().some((z) => S.shades[z]);
     $("shadeChips").innerHTML =
@@ -318,6 +483,28 @@
           activeZones().forEach((z) => { S.shades[z] = { ...sel }; });
         }
         renderShades(); renderSpecs(); applyTint();
+      }));
+  }
+
+  function renderBuildingShades() {
+    const b = bSel();
+    const cur = b.shade;
+    $("shadeChips").innerHTML =
+      `<button class="shade-chip factory ${!cur ? "active" : ""}" data-factory="1">
+        <div class="dot" style="--dot:hsl(205,15%,88%)"></div>
+        <div class="pct">—</div><div class="sub">Bare</div>
+      </button>` +
+      bSeries().shades.map((s, i) => {
+        const l = Math.round(14 + s.vlt * 0.72);
+        return `<button class="shade-chip ${cur && cur.vlt === s.vlt && cur.sku === s.sku ? "active" : ""}" data-i="${i}">
+          <div class="dot" style="--dot:hsl(${s.tone === "warm" ? "28,30%" : "208,10%"},${l}%)"></div>
+          <div class="pct">${s.sku}%</div><div class="sub">${s.name ? "Film" : "Shade"}</div>
+        </button>`;
+      }).join("");
+    $("shadeChips").querySelectorAll(".shade-chip").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        b.shade = btn.dataset.factory ? null : { ...bSeries().shades[+btn.dataset.i] };
+        renderBuildingShades(); renderSpecs(); updateBuildingFilm();
       }));
   }
 
@@ -357,8 +544,23 @@
   }
 
   function renderSpecs() {
+    let sh, warranty;
+    if (S.space !== "vehicles") {
+      sh = bSel().shade || bSeries().shades[0];
+      warranty = bSeries().warranty;
+      const cells = [
+        [sh.vlt + "%", "VLT"],
+        [sh.tser != null ? sh.tser + "%" : "—", "Heat Rejection"],
+        [sh.glare != null ? sh.glare + "%" : "—", "Glare Reduction"],
+        [sh.uv != null ? sh.uv + "%" : "—", "UV Reject"],
+      ];
+      $("specs").innerHTML = cells.map(([v, l]) =>
+        `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
+      $("specsNote").textContent = warranty || "";
+      return;
+    }
     const vlt = activeShadeVlt();
-    const sh = series().shades.find((s) => s.vlt === vlt) || series().shades[0];
+    sh = series().shades.find((s) => s.vlt === vlt) || series().shades[0];
     const cells = [
       [sh.vlt + "%", "VLT"],
       [sh.tser != null ? sh.tser + "%" : "—", "TSER"],
