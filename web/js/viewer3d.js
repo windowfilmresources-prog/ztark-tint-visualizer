@@ -215,6 +215,13 @@ function prepareCar(root, cfg) {
     });
   });
 
+  // bodywork casts the studio key-light shadow; glass panes don't (a full
+  // glasshouse shadow reads as a solid block on the floor)
+  const glassSet = new Set([...glassMeshes, ...Object.values(zoneMeshes).flat()]);
+  root.traverse((o) => {
+    if (o.isMesh) o.castShadow = !glassSet.has(o);
+  });
+
   // tier 1 beats tier 2: when the model ships the Body_Paint contract, ONLY it
   // is paintable — heuristic name-matches (e.g. "Car_Paint_2" roof accents)
   // stay their factory color.
@@ -331,8 +338,8 @@ function contactShadow() {
   c.width = c.height = 256;
   const ctx = c.getContext("2d");
   const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 126);
-  grad.addColorStop(0, "rgba(0,0,0,.42)");
-  grad.addColorStop(0.6, "rgba(0,0,0,.18)");
+  grad.addColorStop(0, "rgba(0,0,0,.28)");
+  grad.addColorStop(0.6, "rgba(0,0,0,.11)");
   grad.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 256, 256);
@@ -465,6 +472,8 @@ function mount(container) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.VSMShadowMap; // soft, blurry studio shadow
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -483,7 +492,40 @@ function mount(container) {
   );
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
-  scene.add(contactShadow());
+
+  // Studio rig: the env map alone lit everything flat and shadowless. A warm
+  // key (with a real soft shadow), a cool fill, and a rear rim give the paint
+  // highlight gradients and ground the car.
+  const key = new THREE.DirectionalLight(0xfff4e8, 1.35);
+  key.position.set(4.5, 6.5, 3.5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = key.shadow.camera.bottom = -4.5;
+  key.shadow.camera.right = key.shadow.camera.top = 4.5;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 18;
+  key.shadow.radius = 9;
+  key.shadow.blurSamples = 12;
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.025;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.4);
+  fill.position.set(-5.5, 3.5, -2.0);
+  scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.55);
+  rim.position.set(-2.0, 5.0, -6.0);
+  scene.add(rim);
+
+  // shadow catcher: keeps the studio color while receiving the key's shadow
+  const catcher = new THREE.Mesh(
+    new THREE.CircleGeometry(10, 48),
+    new THREE.ShadowMaterial({ opacity: 0.26 })
+  );
+  catcher.rotation.x = -Math.PI / 2;
+  catcher.position.y = 0.005;
+  catcher.receiveShadow = true;
+  scene.add(catcher);
+  scene.add(contactShadow()); // faint blob kept underneath for contact darkening
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.6, 0);
