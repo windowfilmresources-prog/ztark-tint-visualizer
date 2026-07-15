@@ -65,7 +65,16 @@ const state = {
 
 const GLASS_RE = /glass|window|windshield|vidrio|glas[s]?_/i;
 const NOT_GLASS_RE = /border|cover|frame|trim|blinker|light|gasket|wiper/i;
+// Paint detection is a 3-tier ladder (see prepareCar):
+//   1. the exact contract — a material named Body_Paint (all fleet models ship it)
+//   2. per-MATERIAL name heuristic, with a not-paint guard (legacy/lab models)
+//   3. largest-surface-area fallback
+// Never match on MESH names: meshes like "CarBody 2_Chrome_0" would drag their
+// chrome/interior/trim materials into the paint bucket (the "paints things it
+// shouldn't" bug).
+const PAINT_EXACT_RE = /^body[ _-]?paint$/i;
 const BODY_RE = /body|paint|carpaint|carroceria|shell|exterior/i;
+const NOT_PAINT_RE = /chrome|glass|interior|trim|tire|tyre|rim|wheel|light|lamp|caliper|grille|mirror|plate|leather|seat|shadow/i;
 
 function tintScalar(vlt) {
   if (vlt == null) return 1.0; // factory glass
@@ -170,6 +179,8 @@ function prepareCar(root, cfg) {
   const zoneMats = Object.fromEntries(ZONES.map((z) => [z, glassMat("Glass_" + z)]));
   const zoneMeshes = Object.fromEntries(ZONES.map((z) => [z, []]));
   const bodyMats = [];
+  const exactPaintMats = [];
+  const heuristicPaintMats = [];
   const glassMeshes = [];
   let hasBakedShadow = false;
 
@@ -196,19 +207,25 @@ function prepareCar(root, cfg) {
     }
     if (!zones && (GLASS_RE.test(o.name) || GLASS_RE.test(matNames))
         && !(NOT_GLASS_RE.test(o.name) || NOT_GLASS_RE.test(matNames))) { glassMeshes.push(o); return; }
-    if (BODY_RE.test(o.name) || BODY_RE.test(matNames)) {
-      mats.forEach((m) => {
-        if (m && m.color && !bodyMats.includes(m)) {
-          m.map = null;
-          m.metalness = 0.15;
-          m.roughness = 0.4;
-          m.envMapIntensity = 1.15;
-          m.needsUpdate = true;
-          bodyMats.push(m);
-        }
-      });
-    }
+    mats.forEach((m) => {
+      if (!m || !m.color || bodyMats.includes(m)) return;
+      const nm = m.name || "";
+      if (PAINT_EXACT_RE.test(nm)) exactPaintMats.push(m);
+      else if (BODY_RE.test(nm) && !NOT_PAINT_RE.test(nm)) heuristicPaintMats.push(m);
+    });
   });
+
+  // tier 1 beats tier 2: when the model ships the Body_Paint contract, ONLY it
+  // is paintable — heuristic name-matches (e.g. "Car_Paint_2" roof accents)
+  // stay their factory color.
+  for (const m of (exactPaintMats.length ? exactPaintMats : heuristicPaintMats)) {
+    m.map = null;
+    m.metalness = 0.15;
+    m.roughness = 0.4;
+    m.envMapIntensity = 1.15;
+    m.needsUpdate = true;
+    bodyMats.push(m);
+  }
 
   // Paint fallback: no material name matched — take the largest-surface-area
   // colored materials (the body shell dominates every car's exterior area).
