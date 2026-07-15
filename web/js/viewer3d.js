@@ -40,7 +40,7 @@ const DEFAULT_FLEET = [
   {
     id: "truck",
     label: "Truck",
-    urls: ["assets/models/truck/truck.glb?v=3"], // bump ?v= when the model file changes
+    urls: ["assets/models/truck/truck.glb?v=4"], // bump ?v= when the model file changes
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5",
   },
@@ -64,7 +64,7 @@ const state = {
 };
 
 const GLASS_RE = /glass|window|windshield|vidrio|glas[s]?_/i;
-const NOT_GLASS_RE = /border|cover|frame|trim|blinker|light|gasket|wiper/i;
+const NOT_GLASS_RE = /border|cover|frame|trim|blinker|light|lamp|lens|gasket|wiper/i;
 // Paint detection is a 3-tier ladder (see prepareCar):
 //   1. the exact contract — a material named Body_Paint (all fleet models ship it)
 //   2. per-MATERIAL name heuristic, with a not-paint guard (legacy/lab models)
