@@ -151,7 +151,23 @@
     renderStageTools();
     window.VIEWER3D.setPaint(S.paint);
     const cr = document.getElementById("modelCredit");
-    if (cr) { cr.textContent = window.VIEWER3D.credit || ""; cr.style.display = window.VIEWER3D.credit ? "" : "none"; }
+    if (cr) {
+      const txt = window.VIEWER3D.credit || "";
+      const url = window.VIEWER3D.creditUrl || "";
+      cr.textContent = "";
+      if (txt && url) {
+        // linked credit per the source platform's attribution guidance
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener license";
+        a.textContent = txt;
+        cr.appendChild(a);
+      } else {
+        cr.textContent = txt;
+      }
+      cr.style.display = txt ? "" : "none";
+    }
     applyTint();
   });
 

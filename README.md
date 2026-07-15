@@ -36,16 +36,27 @@ python3 -m http.server 8742 --directory web
 
 ## 3D model licenses & credits
 
-- `web/assets/models/corvette/` — **Chevrolet Corvette (C7)** by Martin Trafas
-  (sketchfab.com/Bexxie), **CC BY 4.0** (original `license.txt` alongside the model; credit
-  shown in-app). ~38 MB — compress with gltf-transform/Draco before public launch. Note:
-  branded GM replica — swap for the neutral CarConcept if that's a concern.
+All three fleet models are **CC BY 4.0** with a linked in-app credit, a `LICENSE.txt`
+next to each file, and a modification notice (they are **de-identified**: badges,
+model lettering, plates, and baked brand logos removed; materials rebuilt; compressed
+with gltf-transform resize→webp→draco — never `optimize`, it destroys the material
+names the glass detection needs).
+
+- `web/assets/models/corvette/car.glb` (3.3 MB) — based on **"Chevrolet Corvette (C7)"**
+  by Martin Trafas, sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a
+  (author's handle has changed since download; the model page is canonical).
+- `web/assets/models/truck/truck.glb` (1.4 MB) — based on **"2018 Ford F-150 Lariat Super
+  Crew"** by David_Holiday, sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5
+  (obtained via allenai/objaverse, uid 014ebfab735341248431da3d6447bbb5).
+- `web/assets/models/suv/suv.glb` (1.7 MB) — based on **"2020 BMW X5 M Competition"**
+  by David_Holiday, sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753.
 - `web/assets/models/carconcept.glb` — **"Car Concept"** by Eric Chadwick / Darmstadt Graphics
   Group, from KhronosGroup/glTF-Sample-Assets, **CC BY 4.0**. Fictional design, named glass
-  zones — structure-perfect alternate, but its canopy design shows tint poorly.
-- `web/assets/models/ferrari.glb` — three.js example model; Sketchfab source page now disabled,
-  license unverifiable — prototyping only, do not ship. Also it's a convertible.
+  zones — kept as a neutral fallback; its canopy design shows tint poorly.
 - `web/vendor/` — Three.js r160 (MIT) + Draco decoder (Apache-2.0).
+
+De-identification reduces recognizability; it does not license the underlying vehicle
+trade dress. Long-term de-risk options are commissioned originals or user-photo mode.
 
 ## Photo licenses & credits (photo mode, retained as fallback)
 

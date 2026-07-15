@@ -25,24 +25,31 @@ const LAB_ZONES = {
 
 const CAR_PARAM = (new URLSearchParams(location.search).get("car") || "").replace(/[^a-z0-9_-]/gi, "");
 
+// Credits: CC BY 4.0 requires author, license, source link, and a modification
+// note (models are debadged/re-materialed/compressed) — title is optional in 4.0
+// and deliberately omitted in the UI. Full titles + notices live in each model
+// dir's LICENSE.txt.
 const DEFAULT_FLEET = [
   {
     id: "sports",
     label: "Sports",
-    urls: ["assets/models/corvette/car.glb?v=1"],
-    credit: "Chevrolet Corvette (C7) model © Martin Trafas · CC BY 4.0",
+    urls: ["assets/models/corvette/car.glb?v=2"],
+    credit: "Vehicle 3D model © Martin Trafas · CC BY 4.0 · modified",
+    creditUrl: "https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a",
   },
   {
     id: "truck",
     label: "Truck",
-    urls: ["assets/models/truck/truck.glb?v=2"], // bump ?v= when the model file changes
-    credit: "2018 Ford F-150 Lariat model © David_Holiday · CC BY 4.0",
+    urls: ["assets/models/truck/truck.glb?v=3"], // bump ?v= when the model file changes
+    credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
+    creditUrl: "https://sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5",
   },
   {
     id: "suv",
     label: "SUV",
-    urls: ["assets/models/suv/suv.glb?v=2"],
-    credit: "2020 BMW X5 M model © David_Holiday · CC BY 4.0",
+    urls: ["assets/models/suv/suv.glb?v=3"],
+    credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
+    creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
   },
 ];
 
@@ -364,6 +371,7 @@ function loadCar(cfg) {
     state.carReady = true;
     setLoading(null);
     window.VIEWER3D.credit = cfg.credit || "";
+    window.VIEWER3D.creditUrl = cfg.creditUrl || "";
     document.dispatchEvent(new Event("viewer3d-car-loaded"));
   };
 

@@ -9,3 +9,10 @@ Model License:
 
 If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
 This work is based on "2020 BMW X5 M Competition" (https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753) by David_Holiday (https://sketchfab.com/David_Holiday) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Modifications by ZTARK (windowfilmresources-prog, 2026-07):
+- De-identified: hood/tailgate roundels, grille and tailgate model badging,
+  caliper badge decals, license plates removed; baked wheel-center and tire
+  logos patched out of the texture atlas; identifying node names renamed.
+- Materials adjusted (body paint -> Body_Paint metallic blue, rims, lamps,
+  interior); invisible line-primitive meshes dropped at export. Geometry
+  Draco-compressed, textures resized/WebP.

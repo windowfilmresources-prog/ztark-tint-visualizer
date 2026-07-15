@@ -4,3 +4,9 @@ License: CC Attribution (CC-BY 4.0)
 Source: https://sketchfab.com/3d-models/014ebfab735341248431da3d6447bbb5
 Obtained via the Objaverse dataset (allenai/objaverse, uid 014ebfab735341248431da3d6447bbb5),
 which mirrors Sketchfab models with their license metadata.
+
+Modifications by ZTARK (windowfilmresources-prog, 2026-07):
+- De-identified: grille/tailgate ovals and scripts, fender badges, stamped
+  tailgate lettering resurfaced, license plates removed.
+- Materials adjusted (chrome, alloys, lamp lenses, signals; paint material
+  renamed Body_Paint). Geometry Draco-compressed, textures resized/WebP.

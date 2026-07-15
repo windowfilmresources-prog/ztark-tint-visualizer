@@ -9,3 +9,11 @@ Model License:
 
 If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
 This work is based on "Chevrolet Corvette (C7)" (https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a) by Martin Trafas (https://sketchfab.com/Bexxie) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Modifications by ZTARK (windowfilmresources-prog, 2026-07):
+- De-identified: crossed-flags emblems, model-name scripts (bumper/fenders/rims/
+  steering wheel), license plate + frame removed; baked tire and brake-caliper
+  brand lettering neutralized (textures replaced with plain PBR values).
+- Materials adjusted (rims, interior, lamps, calipers); paint material renamed
+  Body_Paint for the viewer. Geometry Draco-compressed, textures resized/WebP.
+- Author's Sketchfab handle has changed since download; the model page above
+  remains canonical.
