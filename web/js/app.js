@@ -62,8 +62,8 @@
     comparing: false,
     space: "vehicles",               // vehicles | residential | commercial
     b: {                             // per-space architectural film selection
-      residential: { series: 0, shade: null, divider: 0.55 },
-      commercial: { series: 0, shade: null, divider: 0.55 },
+      residential: { series: 0, shade: null, view: "exterior" },
+      commercial: { series: 0, shade: null, view: "exterior" },
     },
   };
 
@@ -114,91 +114,34 @@
   function bSel() { return S.b[S.space]; }
   function bSeries() { return BCAT.products[bSel().series]; }
 
-  function buildingFilmLayers(scene) {
+  function bFilm() {
     const sel = bSel().shade;
-    const polys = scene.windows.map((w) => {
-      const pts = w.r
-        ? [[w.r[0], w.r[1]], [w.r[0] + w.r[2], w.r[1]], [w.r[0] + w.r[2], w.r[1] + w.r[3]], [w.r[0], w.r[1] + w.r[3]]]
-        : w.q;
-      return pts.map(([x, y]) => `${(x * 1000).toFixed(1)},${(y * 667).toFixed(1)}`).join(" ");
-    });
-    if (!sel) return { polys, dark: 0, refl: 0, warm: 0 };
-    return {
-      polys,
-      dark: Math.min(0.92, 1 - Math.pow(sel.vlt / 100, 0.62)),
-      refl: (sel.refl || 0) / 100 * 0.55,
-      warm: sel.tone === "warm" ? 0.16 : 0,
-    };
+    return sel ? { vlt: sel.vlt, refl: sel.refl || 0, tone: sel.tone || null } : null;
   }
 
   function renderBuilding() {
     const scene = BSCENES[S.space];
-    const f = buildingFilmLayers(scene);
-    const d = bSel().divider;
     $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
-      <div class="bstage" id="bstage">
-        <img src="${scene.img}" alt="${scene.label} building">
-        <svg viewBox="0 0 1000 667" preserveAspectRatio="none">
-          <defs>
-            <clipPath id="bClip"><rect id="bClipRect" x="0" y="0" width="${d * 1000}" height="667"/></clipPath>
-            <linearGradient id="bSheen" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#dfeaf4"/><stop offset="0.5" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d6e2"/>
-            </linearGradient>
-          </defs>
-          <g clip-path="url(#bClip)">
-            ${f.polys.map((p) => `<polygon class="bf-dark" points="${p}" fill="#01050a" style="mix-blend-mode:multiply" opacity="${f.dark}"/>`).join("")}
-            ${f.polys.map((p) => `<polygon class="bf-refl" points="${p}" fill="url(#bSheen)" style="mix-blend-mode:screen" opacity="${f.refl}"/>`).join("")}
-            ${f.polys.map((p) => `<polygon class="bf-warm" points="${p}" fill="#8a4a12" style="mix-blend-mode:multiply" opacity="${f.warm}"/>`).join("")}
-          </g>
-        </svg>
-        <div class="bdivider" id="bDivider" style="left:${d * 100}%">
-          <div class="bhandle" role="slider" aria-label="Comparison divider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(d * 100)}" tabindex="0">⟨ ⟩</div>
-        </div>
-        <span class="bside-label" style="left:14px;top:50px">WITH FILM</span>
-        <span class="bside-label" style="right:12px">BARE GLASS</span>
-        <div class="photo-credit">${scene.credit}</div>
-      </div>
-      <div class="stage-hint">Drag the divider to compare</div>`;
-    wireDivider();
+      <div id="viewer3d"></div>
+      <div class="stage-hint" id="stageHint">Locked isometric view — switch to Interior to look out through the glass</div>
+      <div class="photo-credit" id="modelCredit"></div>`;
+    const boot = () => {
+      if (S.space === "vehicles") return; // user already left the space
+      const el = document.getElementById("viewer3d");
+      if (!el || !window.VIEWER3D) return;
+      window.VIEWER3D.mount(el);
+      window.VIEWER3D.setBuildingView(bSel().view || "exterior");
+      window.VIEWER3D.loadBuilding({ urls: [scene.glb], credit: scene.credit, isoDir: scene.isoDir });
+      window.VIEWER3D.setBuildingFilm(bFilm());
+    };
+    if (window.VIEWER3D) boot();
+    else document.addEventListener("viewer3d-ready", boot, { once: true });
     renderBadge();
   }
 
   function updateBuildingFilm() {
-    const scene = BSCENES[S.space];
-    const f = buildingFilmLayers(scene);
-    const st = $("bstage");
-    if (!st) return;
-    st.querySelectorAll(".bf-dark").forEach((p) => p.setAttribute("opacity", f.dark));
-    st.querySelectorAll(".bf-refl").forEach((p) => p.setAttribute("opacity", f.refl));
-    st.querySelectorAll(".bf-warm").forEach((p) => p.setAttribute("opacity", f.warm));
+    if (window.VIEWER3D) window.VIEWER3D.setBuildingFilm(S.comparing ? null : bFilm());
     renderBadge();
-  }
-
-  function wireDivider() {
-    const stage = $("bstage");
-    const div = $("bDivider");
-    if (!stage || !div) return;
-    const setPos = (clientX) => {
-      const r = stage.getBoundingClientRect();
-      const d = Math.min(0.96, Math.max(0.04, (clientX - r.left) / r.width));
-      bSel().divider = d;
-      div.style.left = d * 100 + "%";
-      const rect = stage.querySelector("#bClipRect");
-      if (rect) rect.setAttribute("width", d * 1000);
-      div.querySelector(".bhandle").setAttribute("aria-valuenow", Math.round(d * 100));
-    };
-    let dragging = false;
-    div.addEventListener("pointerdown", (e) => { dragging = true; div.setPointerCapture(e.pointerId); e.preventDefault(); });
-    div.addEventListener("pointermove", (e) => { if (dragging) setPos(e.clientX); });
-    ["pointerup", "pointercancel"].forEach((ev) => div.addEventListener(ev, () => { dragging = false; }));
-    stage.addEventListener("pointerdown", (e) => { if (e.target.tagName === "IMG" || e.target.tagName === "svg") setPos(e.clientX); });
-    div.querySelector(".bhandle").addEventListener("keydown", (e) => {
-      const step = e.key === "ArrowLeft" ? -0.04 : e.key === "ArrowRight" ? 0.04 : 0;
-      if (!step) return;
-      e.preventDefault();
-      const r = stage.getBoundingClientRect();
-      setPos(r.left + (bSel().divider + step) * r.width);
-    });
   }
 
   function renderVehicle() {
@@ -299,6 +242,7 @@
   }
 
   function applyTint() {
+    if (S.space !== "vehicles") { updateBuildingFilm(); return; }
     if (MODE_3D) {
       if (window.VIEWER3D && window.VIEWER3D.carReady) {
         const v = {};
@@ -382,13 +326,37 @@
       b.addEventListener("click", () => enterSpace(b.dataset.s)));
   }
 
+  function renderViewTabs(show) {
+    let el = $("viewTabs");
+    if (!show) { if (el) el.parentElement.style.display = "none"; return; }
+    if (!el) {
+      const group = document.createElement("div");
+      group.className = "group";
+      group.innerHTML = `<span class="group-label">View</span><span id="viewTabs" class="group"></span>`;
+      const spaceGroup = $("spaceTabs").parentElement;
+      spaceGroup.parentElement.insertBefore(group, spaceGroup.nextSibling);
+      el = $("viewTabs");
+    }
+    el.parentElement.style.display = "";
+    const cur = bSel().view || "exterior";
+    el.innerHTML = [["exterior", "Exterior"], ["interior", "Interior"]].map(([id, label]) =>
+      `<button class="veh-btn ${cur === id ? "active" : ""}" data-view="${id}">${label}</button>`).join("");
+    el.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        bSel().view = b.dataset.view;
+        if (window.VIEWER3D) window.VIEWER3D.setBuildingView(b.dataset.view);
+        renderViewTabs(true);
+      }));
+  }
+
   // ---------- stage tools ----------
   function renderStageTools() {
     renderSpaceTabs();
     const building = S.space !== "vehicles";
     $("vehTabs").parentElement.style.display = building ? "none" : "";
     $("paints").parentElement.style.display = building ? "none" : "";
-    $("holdCompare").style.display = building ? "none" : "";
+    $("holdCompare").style.display = ""; // hold-to-compare works in every space
+    renderViewTabs(building);
     if (building) return;
     const fleet = MODE_3D ? fleet3D() : FLEET2D;
     const tabs = $("vehTabs");

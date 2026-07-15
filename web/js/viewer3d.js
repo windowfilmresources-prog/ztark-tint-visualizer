@@ -64,6 +64,9 @@ const state = {
   carRoot: null, carReady: false, container: null, loadingEl: null,
   resizeObserver: null, raycaster: new THREE.Raycaster(),
   loadGen: 0, visible: true, intersecting: true,
+  // architectural mode
+  buildingPrep: null, buildingView: "exterior", buildingFilm: null,
+  persCam: null, orthoCam: null, orthoHeight: 6,
 };
 
 const GLASS_RE = /glass|window|windshield|vidrio|glas[s]?_/i;
@@ -177,8 +180,110 @@ function splitGlass(mesh, frame) {
   return Object.fromEntries(ZONES.map((z) => [z, build(buckets[z])]));
 }
 
+// ---------------------------------------------------------------- building preparation
+// Architectural dioramas: locked isometric ortho camera + a furnished-interior
+// view. All Glass_* meshes share one physical material driven by setBuildingFilm.
+function prepareBuilding(root) {
+  const glassMeshes = [];
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, metalness: 0.0, roughness: 0.06, transmission: 1.0,
+  });
+  glass.name = "Building_Glass_Live";
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const matNames = (Array.isArray(o.material) ? o.material : [o.material]).map((m) => m && m.name || "").join(" ");
+    if (GLASS_RE.test(o.name) || GLASS_RE.test(matNames)) {
+      o.material = glass;
+      o.castShadow = false;
+      glassMeshes.push(o);
+    } else {
+      o.castShadow = true;
+    }
+  });
+  // fit the diorama into the studio (shadow rig covers ~±4.5m)
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const scale = 5.2 / Math.max(size.x, size.z);
+  root.scale.setScalar(scale);
+  const box2 = new THREE.Box3().setFromObject(root);
+  const center = box2.getCenter(new THREE.Vector3());
+  root.position.x -= center.x;
+  root.position.z -= center.z;
+  root.position.y -= box2.min.y;
+  return {
+    building: true,
+    buildingGlass: glass,
+    glassMeshes,
+    camNode: root.getObjectByName("InteriorCam") || null,
+    targetNode: root.getObjectByName("InteriorTarget") || null,
+    bodyMats: [], zoneMats: null,
+    zoneMeshes: Object.fromEntries(ZONES.map((z) => [z, []])),
+    hasBakedShadow: false,
+  };
+}
+
+function applyBuildingView(view) {
+  if (!state.buildingPrep || !state.carRoot) return;
+  state.buildingView = view;
+  state.carRoot.updateMatrixWorld(true);
+  // soft interior fill so ceilings/back walls don't read as black voids
+  if (!state.interiorFill) {
+    state.interiorFill = new THREE.PointLight(0xfff2e0, 14, 14, 1.6);
+    state.interiorFill.visible = false;
+    state.scene.add(state.interiorFill);
+  }
+  if (view === "interior" && state.buildingPrep.camNode) {
+    const cam = state.persCam;
+    cam.fov = 58;
+    cam.near = 0.05;
+    state.buildingPrep.camNode.getWorldPosition(cam.position);
+    const tgt = new THREE.Vector3();
+    if (state.buildingPrep.targetNode) state.buildingPrep.targetNode.getWorldPosition(tgt);
+    cam.lookAt(tgt);
+    cam.updateProjectionMatrix();
+    state.camera = cam;
+    state.interiorFill.position.copy(cam.position).add(new THREE.Vector3(0, 0.5, 0));
+    state.interiorFill.visible = true;
+  } else {
+    state.interiorFill.visible = false;
+    const box = new THREE.Box3().setFromObject(state.carRoot);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const cam = state.orthoCam;
+    const d = state.buildingIsoDir || [1, 0.62, -1];
+    const dir = new THREE.Vector3(d[0], d[1], d[2]).normalize();
+    // key light fronts the shown facades (cars restore it in restoreCarCamera)
+    if (state.keyLight) state.keyLight.position.set(Math.sign(d[0]) * 5, 7, Math.sign(d[2]) * 4);
+    cam.position.copy(center).addScaledVector(dir, 16);
+    cam.lookAt(center.x, center.y * 0.92, center.z);
+    state.orthoHeight = Math.max(size.y * 1.3, Math.max(size.x, size.z) * 0.95);
+    cam.near = 0.1; cam.far = 60;
+    state.camera = cam;
+  }
+  resize();
+}
+
+function restoreCarCamera() {
+  if (state.interiorFill) state.interiorFill.visible = false;
+  if (state.keyLight) state.keyLight.position.set(4.5, 6.5, 3.5);
+  const cam = state.persCam;
+  cam.fov = 38;
+  cam.near = 0.1;
+  cam.position.set(-5.0, 1.35, 2.2);
+  cam.updateProjectionMatrix();
+  state.camera = cam;
+  if (state.controls) {
+    state.controls.object = cam;
+    state.controls.enabled = true;
+    state.controls.target.set(0, 0.6, 0);
+    state.controls.update();
+  }
+  resize();
+}
+
 // ---------------------------------------------------------------- car preparation
 function prepareCar(root, cfg) {
+  if (cfg && cfg.building) return prepareBuilding(root);
   const zoneMats = Object.fromEntries(ZONES.map((z) => [z, glassMat("Glass_" + z)]));
   const zoneMeshes = Object.fromEntries(ZONES.map((z) => [z, []]));
   const bodyMats = [];
@@ -523,7 +628,19 @@ function loadCar(cfg) {
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
     });
     state.carReady = true;
-    addPlates(cfg, prep);
+    if (prep.building) {
+      state.buildingPrep = prep;
+      state.buildingIsoDir = cfg.isoDir || [1, 0.62, -1];
+      clearPlates(); // the outgoing car's license plates must not float in the diorama
+      if (state.controls) state.controls.enabled = false; // locked isometric view
+      applyBuildingView(state.buildingView || "exterior");
+      applyBuildingFilm(state.buildingFilm);
+    } else {
+      const wasBuilding = !!state.buildingPrep;
+      state.buildingPrep = null;
+      if (wasBuilding) restoreCarCamera();
+      addPlates(cfg, prep);
+    }
     setLoading(null);
     window.VIEWER3D.credit = cfg.credit || "";
     window.VIEWER3D.creditUrl = cfg.creditUrl || "";
@@ -613,6 +730,8 @@ function mount(container) {
 
   const camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 100);
   camera.position.set(-5.0, 1.35, 2.2);
+  state.persCam = camera;
+  state.orthoCam = new THREE.OrthographicCamera(-4, 4, 2.25, -2.25, 0.1, 60);
 
   const env = new THREE.PMREMGenerator(renderer);
   scene.environment = env.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -629,6 +748,7 @@ function mount(container) {
   // highlight gradients and ground the car.
   const key = new THREE.DirectionalLight(0xfff4e8, 1.35);
   key.position.set(4.5, 6.5, 3.5);
+  state.keyLight = key;
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.left = key.shadow.camera.bottom = -4.5;
@@ -704,8 +824,34 @@ function resize() {
   const w = state.container.clientWidth || 800;
   const h = state.container.clientHeight || Math.round(w * 9 / 16);
   state.renderer.setSize(w, h);
-  state.camera.aspect = w / h;
+  const aspect = w / h;
+  if (state.camera.isOrthographicCamera) {
+    const hh = state.orthoHeight / 2;
+    state.camera.top = hh; state.camera.bottom = -hh;
+    state.camera.left = -hh * aspect; state.camera.right = hh * aspect;
+  } else {
+    state.camera.aspect = aspect;
+  }
   state.camera.updateProjectionMatrix();
+}
+
+// film: {vlt, refl, tone} or null for bare glass
+function applyBuildingFilm(film) {
+  const prep = state.buildingPrep;
+  if (!prep || !prep.buildingGlass) return;
+  const m = prep.buildingGlass;
+  if (!film) {
+    m.color.setScalar(1);
+    m.envMapIntensity = 1;
+    m.metalness = 0;
+    return;
+  }
+  const s = tintScalar(film.vlt);
+  m.color.setScalar(s);
+  if (film.tone === "warm") { m.color.g *= 0.84; m.color.b *= 0.64; }
+  const r = (film.refl || 0) / 100;
+  m.envMapIntensity = 1 + r * 3.2;
+  m.metalness = r * 0.4;
 }
 
 // ---------------------------------------------------------------- public API
@@ -728,9 +874,15 @@ window.VIEWER3D = {
       if (m) m.color.setScalar(tintScalar(vlts && vlts[z] != null ? vlts[z] : null));
     });
   },
+  // architectural mode
+  loadBuilding(cfg) { loadCar({ ...cfg, building: true }); },
+  get isBuilding() { return !!state.buildingPrep; },
+  setBuildingFilm(film) { state.buildingFilm = film || null; applyBuildingFilm(state.buildingFilm); },
+  setBuildingView(view) { state.buildingView = view === "interior" ? "interior" : "exterior"; applyBuildingView(state.buildingView); },
+  get buildingView() { return state.buildingView; },
   // returns the zone name under the pointer, or null
   pickZone(clientX, clientY) {
-    if (!state.renderer || !state.zoneMeshes) return null;
+    if (!state.renderer || !state.zoneMeshes || state.buildingPrep) return null;
     const r = state.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - r.left) / r.width) * 2 - 1,

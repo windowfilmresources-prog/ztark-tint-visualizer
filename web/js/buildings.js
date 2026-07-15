@@ -1,43 +1,23 @@
-// Architectural (flat-glass) mode: real building photography with traced window
-// masks + a draggable before/after divider. Hüper Optik and Edge only — Autobahn
-// is automotive-only. Catalogs from the brands' architectural lines (factory spec
-// sheets for Hüper; programedge.com published TSER/glare for Edge — Edge does not
-// publish VLT, shade number is nominal VLT by industry convention).
-//
-// Window masks: normalized [0..1] image coordinates. r = axis-aligned rect
-// [x, y, w, h]; q = arbitrary quad [[x,y] x4] for perspective faces.
+// Architectural (flat-glass) mode: ZTARK-original 3D diorama buildings (locked
+// isometric exterior + furnished interior view), real transmission glass driven
+// by the film selection. Hüper Optik and Edge only — Autobahn is automotive-only.
+// Catalogs from the brands' architectural lines (factory spec sheets for Hüper;
+// programedge.com published TSER/glare for Edge — Edge does not publish VLT,
+// shade number is nominal VLT by industry convention).
 
 window.BUILDINGS = {
   scenes: {
     residential: {
       label: "Residential",
-      img: "assets/buildings/residential.jpg",
-      credit: "Photo: Max Vakhtbovych · Pexels",
-      windows: [
-        { r: [0.353, 0.308, 0.056, 0.084] },   // upper floor, left
-        { r: [0.444, 0.278, 0.076, 0.127] },   // upper floor, center tall
-        { r: [0.571, 0.308, 0.053, 0.084] },   // upper floor, right
-        { r: [0.444, 0.405, 0.076, 0.114] },   // center entry glazing
-        { r: [0.200, 0.404, 0.064, 0.112] },   // left wing pane 1
-        { r: [0.267, 0.404, 0.064, 0.112] },   // left wing pane 2
-        { r: [0.333, 0.404, 0.062, 0.112] },   // left wing pane 3
-        { r: [0.672, 0.404, 0.057, 0.108] },   // right wing pane 1
-        { r: [0.732, 0.404, 0.056, 0.108] },   // right wing pane 2
-      ],
+      glb: "assets/models/buildings/house.glb",
+      credit: "ZTARK original concept architecture",
+      isoDir: [-1, 0.62, 1],   // slider walls face +Z, wing glass -X
     },
     commercial: {
       label: "Commercial",
-      img: "assets/buildings/commercial.jpg",
-      credit: "Photo: Pixabay · CC0",
-      windows: [
-        // corner glass tower, left face (grid-traced; the photo's hero surface —
-        // the treed west wing stays unmasked on purpose, cleaner than partial masks)
-        { q: [[0.236, 0.372], [0.500, 0.158], [0.500, 0.700], [0.236, 0.635]] },
-        // corner glass tower, right face
-        { q: [[0.500, 0.158], [0.860, 0.335], [0.860, 0.560], [0.500, 0.700]] },
-        // ground-floor ribbon under the left-face parapet
-        { q: [[0.245, 0.725], [0.480, 0.790], [0.480, 0.850], [0.245, 0.800]] },
-      ],
+      glb: "assets/models/buildings/office.glb",
+      credit: "ZTARK original concept architecture",
+      isoDir: [-1, 0.62, -1],  // curtain-wall front + entry face -X/-Z
     },
   },
 
