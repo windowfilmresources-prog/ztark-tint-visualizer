@@ -47,7 +47,7 @@ const DEFAULT_FLEET = [
   {
     id: "suv",
     label: "SUV",
-    urls: ["assets/models/suv/suv.glb?v=5"],
+    urls: ["assets/models/suv/suv.glb?v=6"],
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
   },
