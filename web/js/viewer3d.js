@@ -743,6 +743,7 @@ function mount(container) {
   );
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
+  state.floorMat = floor.material;
 
   // Studio rig: the env map alone lit everything flat and shadowless. A warm
   // key (with a real soft shadow), a cool fill, and a rear rim give the paint
@@ -828,6 +829,101 @@ function mount(container) {
   loadCar(initial);
 }
 
+// ---------------------------------------------------------------- cinematic reveal
+// Dark-studio entrance: first visible frame is a low-light headlight close-up
+// (armReveal, applied before the car appears), then playReveal ramps the studio
+// lights while the camera sweeps back to the standard three-quarter. Skippable
+// on any input; a timeout guarantees the end state if rAF is throttled.
+const REVEAL = {
+  dur: 2600,
+  fromFov: 40, toFov: 38,
+  fromPos: [-1.15, 0.58, 3.05], fromTgt: [-0.45, 0.52, 2.0],
+  ctrl: [-4.4, 0.75, 3.9],
+  toPos: [-5.0, 1.35, 2.2], toTgt: [0, 0.6, 0],
+  fromExposure: 0.16, toExposure: 1.0,
+};
+let revealArmed = false, revealPlaying = false;
+const REVEAL_DEBUG = (new URLSearchParams(location.search)).get("revealDebug");
+
+function armReveal() {
+  if (!state.persCam || !state.renderer) return;
+  revealArmed = true;
+  const c = state.persCam;
+  c.fov = REVEAL.fromFov;
+  c.position.set(REVEAL.fromPos[0], REVEAL.fromPos[1], REVEAL.fromPos[2]);
+  c.lookAt(REVEAL.fromTgt[0], REVEAL.fromTgt[1], REVEAL.fromTgt[2]);
+  c.updateProjectionMatrix();
+  if (state.controls) state.controls.enabled = false;
+  state.renderer.toneMappingExposure = REVEAL.fromExposure;
+  if (state.keyLight) state.keyLight.intensity = 0.12;
+  if (state.scene && state.scene.background) state.scene.background.setHex(0x0b0b0d);
+  if (state.scene && state.scene.fog) state.scene.fog.color.setHex(0x0b0b0d);
+  if (state.floorMat) state.floorMat.color.setHex(0x0b0b0d);
+  if (state.loadingEl) state.loadingEl.style.background = "#0a0a0b"; // keep the black continuity from the opener
+}
+
+const REVEAL_DARK = new THREE.Color(0x0b0b0d);
+const REVEAL_LIGHT = new THREE.Color(0xf2f3f5);
+
+function revealApply(u) {
+  const s3 = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  const e = s3(u);
+  const it = 1 - e;
+  const c = state.persCam;
+  // quadratic bezier through a wide side arc
+  for (let i = 0; i < 3; i++) {
+    const a = REVEAL.fromPos[i], b = REVEAL.toPos[i], q = REVEAL.ctrl[i];
+    c.position.setComponent(i, it * it * a + 2 * it * e * q + e * e * b);
+  }
+  const tx = REVEAL.fromTgt[0] + (REVEAL.toTgt[0] - REVEAL.fromTgt[0]) * e;
+  const ty = REVEAL.fromTgt[1] + (REVEAL.toTgt[1] - REVEAL.fromTgt[1]) * e;
+  const tz = REVEAL.fromTgt[2] + (REVEAL.toTgt[2] - REVEAL.fromTgt[2]) * e;
+  c.lookAt(tx, ty, tz);
+  c.fov = REVEAL.fromFov + (REVEAL.toFov - REVEAL.fromFov) * e;
+  c.updateProjectionMatrix();
+  // lights come up front-loaded — mostly there by two-thirds through
+  const le = s3(Math.min(1, u * 1.5));
+  state.renderer.toneMappingExposure = REVEAL.fromExposure + (REVEAL.toExposure - REVEAL.fromExposure) * le;
+  if (state.keyLight) state.keyLight.intensity = 0.12 + (1.35 - 0.12) * le;
+  if (state.scene && state.scene.background && state.scene.background.isColor)
+    state.scene.background.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
+  if (state.scene && state.scene.fog) state.scene.fog.color.copy(state.scene.background);
+  if (state.floorMat) state.floorMat.color.copy(state.scene.background);
+}
+
+function playReveal() {
+  if (!revealArmed || revealPlaying || !state.carReady) return Promise.resolve();
+  revealPlaying = true;
+  revealArmed = false;
+  if (REVEAL_DEBUG) { revealApply(Math.min(1, (+REVEAL_DEBUG) / REVEAL.dur)); return new Promise(() => {}); }
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    let ended = false;
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      window.removeEventListener("pointerdown", finish);
+      window.removeEventListener("keydown", finish);
+      revealApply(1);
+      restoreCarCamera();
+      if (state.loadingEl) state.loadingEl.style.background = "";
+      revealPlaying = false;
+      resolve();
+    };
+    const step = (now) => {
+      if (ended) return;
+      const u = (now - t0) / REVEAL.dur;
+      if (u >= 1) { finish(); return; }
+      revealApply(u);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    setTimeout(finish, REVEAL.dur + 400);
+    window.addEventListener("pointerdown", finish);
+    window.addEventListener("keydown", finish);
+  });
+}
+
 function resize() {
   if (!state.renderer || !state.container) return;
   const w = state.container.clientWidth || 800;
@@ -884,6 +980,9 @@ window.VIEWER3D = {
       if (m) m.color.setScalar(tintScalar(vlts && vlts[z] != null ? vlts[z] : null));
     });
   },
+  // cinematic reveal (armed by the app before the first car shows)
+  armReveal,
+  playReveal,
   // architectural mode
   loadBuilding(cfg) { loadCar({ ...cfg, building: true }); },
   get isBuilding() { return !!state.buildingPrep; },

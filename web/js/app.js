@@ -178,6 +178,7 @@
         const el = document.getElementById("viewer3d");
         if (!el) return;
         window.VIEWER3D.mount(el);
+        if (wantReveal && !bootedOnce && window.VIEWER3D.armReveal) window.VIEWER3D.armReveal();
         if (window.VIEWER3D.isBuilding) {
           // a building space replaced the car in the scene — reload the car
           window.VIEWER3D.loadCar(S.vehicle);
@@ -194,6 +195,8 @@
         if (window.VIEWER3D) boot();
         else document.addEventListener("viewer3d-ready", boot, { once: true });
       };
+      const wantReveal = !!(BRAND.intro) && !qs.get("noreveal") &&
+        !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
       if (window.__INTRO_DONE) {
         // brand opener playing: hold the GPU-heavy viewer boot (context, PMREM,
         // shader compiles) until it dismisses; meanwhile warm the model bytes —
@@ -233,10 +236,16 @@
     applyTint();
   }
 
+  let bootedOnce = false;
+
   // every car load (including fleet swaps) re-applies paint, tint, and credit;
   // also (re)renders the vehicle tabs — the fleet isn't known until the module loads
   document.addEventListener("viewer3d-car-loaded", () => {
     if (!MODE_3D || !window.VIEWER3D) return;
+    if (!bootedOnce) {
+      bootedOnce = true;
+      if (window.VIEWER3D.playReveal) window.VIEWER3D.playReveal();
+    }
     const fleet = fleet3D();
     if (fleet.length && !fleet.some((f) => f.id === S.vehicle)) S.vehicle = fleet[0].id;
     renderStageTools();
