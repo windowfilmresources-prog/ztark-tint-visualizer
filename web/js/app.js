@@ -106,6 +106,7 @@
   function abandon3D() {
     if (!MODE_3D) return;
     MODE_3D = false;
+    $("stage").classList.remove("cine"); // reveal never played; chrome must show
     computeModes();
     if (S.space !== "vehicles") enterSpace("vehicles"); // buildings need 3D
     S.vehicle = FLEET2D[0].id;
@@ -178,7 +179,10 @@
         const el = document.getElementById("viewer3d");
         if (!el) return;
         window.VIEWER3D.mount(el);
-        if (wantReveal && !bootedOnce && window.VIEWER3D.armReveal) window.VIEWER3D.armReveal();
+        if (wantReveal && !bootedOnce && window.VIEWER3D.armReveal) {
+          window.VIEWER3D.armReveal();
+          $("stage").classList.add("cine"); // stage chrome sits out the cinematic
+        }
         if (window.VIEWER3D.isBuilding) {
           // a building space replaced the car in the scene — reload the car
           window.VIEWER3D.loadCar(S.vehicle);
@@ -244,7 +248,9 @@
     if (!MODE_3D || !window.VIEWER3D) return;
     if (!bootedOnce) {
       bootedOnce = true;
-      if (window.VIEWER3D.playReveal) window.VIEWER3D.playReveal();
+      if (window.VIEWER3D.playReveal)
+        window.VIEWER3D.playReveal().then(() => $("stage").classList.remove("cine"));
+      else $("stage").classList.remove("cine");
     }
     const fleet = fleet3D();
     if (fleet.length && !fleet.some((f) => f.id === S.vehicle)) S.vehicle = fleet[0].id;

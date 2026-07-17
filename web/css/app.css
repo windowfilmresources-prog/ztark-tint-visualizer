@@ -100,6 +100,14 @@ main > * { min-width: 0; } /* canvas intrinsic size must not blow out the grid c
 }
 .viewer-loading .pct { font-family: var(--heading-font); font-size: 13px; letter-spacing: .12em; color: #6b7076; }
 @keyframes vspin { to { transform: rotate(360deg); } }
+/* cinematic reveal: dark loading variant, dismissed instantly (no fade over the headlight shot) */
+.viewer-loading.cine { background: #0a0a0b; }
+.viewer-loading.cine.done { transition: none; }
+.viewer-loading.cine .spin { border-color: rgba(255,255,255,.1); border-top-color: rgba(255,255,255,.34); }
+.viewer-loading.cine .pct { color: #4a4f56; }
+/* stage chrome (VLT badge, hint, credit) sits out the cinematic and eases back in */
+.badge-vlt, .stage-hint, .photo-credit { transition: opacity .5s ease; }
+.stage.cine .badge-vlt, .stage.cine .stage-hint, .stage.cine .photo-credit { opacity: 0; pointer-events: none; }
 .stage-hint {
   position: absolute; bottom: 10px; left: 14px; font-size: 11px;
   color: rgba(20,26,32,.55); background: rgba(255,255,255,.6);

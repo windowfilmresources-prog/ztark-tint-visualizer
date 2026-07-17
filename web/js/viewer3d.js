@@ -251,6 +251,7 @@ function applyBuildingView(view) {
     const dir = new THREE.Vector3(d[0], d[1], d[2]).normalize();
     // key light fronts the shown facades (cars restore it in restoreCarCamera)
     if (state.keyLight) state.keyLight.position.set(Math.sign(d[0]) * 5, 7, Math.sign(d[2]) * 4);
+    if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved
     cam.position.copy(center).addScaledVector(dir, 16);
     cam.lookAt(center.x, center.y * 0.92, center.z);
     state.orthoHeight = Math.max(size.y * 1.3, Math.max(size.x, size.z) * 0.95);
@@ -265,6 +266,7 @@ function restoreCarCamera() {
   if (state.interiorFill) state.interiorFill.visible = false;
   if (state.scene) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
   if (state.keyLight) state.keyLight.position.set(4.5, 6.5, 3.5);
+  if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved
   const cam = state.persCam;
   cam.fov = 38;
   cam.near = 0.1;
@@ -622,6 +624,7 @@ function loadCar(cfg) {
     const fb = state.scene.getObjectByName("FallbackShadow");
     if (fb) fb.visible = !prep.hasBakedShadow;
     state.scene.add(root);
+    state.renderer.shadowMap.needsUpdate = true; // new shadow caster in the scene
     Object.assign(state, {
       carRoot: root, bodyMats: prep.bodyMats,
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
@@ -711,7 +714,7 @@ function mount(container) {
 
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
   } catch (e) {
     setLoading("3D not supported on this device", false);
     document.dispatchEvent(new Event("viewer3d-unavailable"));
@@ -723,6 +726,11 @@ function mount(container) {
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.VSMShadowMap; // soft, blurry studio shadow
+  // Nothing shadow-relevant moves frame-to-frame (camera orbits, lights ramp
+  // intensity only), yet VSM re-renders + double-blurs its 2048px map every
+  // frame. Bake on demand instead: flagged on car/building load and key moves.
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -765,9 +773,11 @@ function mount(container) {
   const fill = new THREE.DirectionalLight(0xdfe8ff, 0.4);
   fill.position.set(-5.5, 3.5, -2.0);
   scene.add(fill);
+  state.fillLight = fill;
   const rim = new THREE.DirectionalLight(0xffffff, 0.55);
   rim.position.set(-2.0, 5.0, -6.0);
   scene.add(rim);
+  state.rimLight = rim;
 
   // shadow catcher: keeps the studio color while receiving the key's shadow
   const catcher = new THREE.Mesh(
@@ -804,7 +814,10 @@ function mount(container) {
   // live refs, not the mount-time closure: building mode swaps state.camera
   // (ortho iso / interior), and a disabled OrbitControls must not keep driving
   // the camera back to its orbit position every frame
-  const loop = () => {
+  const loop = (t) => {
+    if (PERF_ON) (window.__FRAMES || (window.__FRAMES = [])).push(t);
+    if (state.revealWarming) return; // hold the last dark frame while shaders compile
+    if (state.revealTick) state.revealTick(t); // camera+lights update, then render, same frame
     if (state.controls && state.controls.enabled) state.controls.update();
     state.renderer.render(state.scene, state.camera);
   };
@@ -830,20 +843,62 @@ function mount(container) {
 }
 
 // ---------------------------------------------------------------- cinematic reveal
-// Dark-studio entrance: first visible frame is a low-light headlight close-up
-// (armReveal, applied before the car appears), then playReveal ramps the studio
-// lights while the camera sweeps back to the standard three-quarter. Skippable
-// on any input; a timeout guarantees the end state if rAF is throttled.
+// Dark-studio entrance in three beats: a held low-light headlight close-up
+// (armReveal poses it before the car's first frame), then the studio lights
+// sweep up WHILE the camera arcs back, landing on the standard three-quarter
+// just after full brightness. The tick runs inside the render loop (update
+// then render, same frame) and the clock starts only after shaders/textures
+// are warmed, so the sweep never eats a compile stall. Skippable on any
+// input; a timeout guarantees the end state if rAF is throttled.
 const REVEAL = {
-  dur: 2600,
-  fromFov: 40, toFov: 38,
+  dur: 3400,
+  hold: 0.16,               // dark beat: camera micro push-in only
+  lightLag: 0.06, lightSpan: 0.66, // light ramp start/width within the sweep
+  fromFov: 44, toFov: 38, // wide-to-tele compression release across the sweep
   fromPos: [-1.15, 0.58, 3.05], fromTgt: [-0.45, 0.52, 2.0],
-  ctrl: [-4.4, 0.75, 3.9],
+  ctrl: [-3.7, 0.85, 3.3],
   toPos: [-5.0, 1.35, 2.2], toTgt: [0, 0.6, 0],
   fromExposure: 0.16, toExposure: 1.0,
 };
 let revealArmed = false, revealPlaying = false;
 const REVEAL_DEBUG = (new URLSearchParams(location.search)).get("revealDebug");
+const PERF_ON = (new URLSearchParams(location.search)).has("perf");
+
+const REVEAL_DARK = new THREE.Color(0x0b0b0d);
+const REVEAL_LIGHT = new THREE.Color(0xf2f3f5);
+
+// Everything env-lit stays bright even at exposure 0.16, so the dark beat has
+// to dim the env map (per-material uniform) and the fill/rim rig too, not just
+// key + exposure. Bases are captured here and restored exactly at finish.
+function ensureRevealRig() {
+  if (state.revealRig) return state.revealRig;
+  const mats = new Set();
+  if (state.scene) state.scene.traverse((o) => {
+    const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of ms) if ("envMapIntensity" in m) mats.add(m);
+  });
+  state.revealRig = { env: [...mats].map((m) => [m, m.envMapIntensity]) };
+  return state.revealRig;
+}
+function releaseRevealRig(restore) {
+  if (restore && state.revealRig)
+    for (const [m, v] of state.revealRig.env) m.envMapIntensity = v;
+  state.revealRig = null;
+}
+
+function revealLights(le) {
+  state.renderer.toneMappingExposure = REVEAL.fromExposure + (REVEAL.toExposure - REVEAL.fromExposure) * le;
+  if (state.keyLight) state.keyLight.intensity = 0.12 + (1.35 - 0.12) * le;
+  // 0.4 / 0.55 mirror the studio rig's fill/rim intensities set at mount
+  if (state.fillLight) state.fillLight.intensity = 0.4 * (0.05 + 0.95 * le);
+  if (state.rimLight) state.rimLight.intensity = 0.55 * (0.08 + 0.92 * le);
+  if (state.revealRig)
+    for (const [m, base] of state.revealRig.env) m.envMapIntensity = base * (0.05 + 0.95 * le);
+  if (state.scene && state.scene.background && state.scene.background.isColor)
+    state.scene.background.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
+  if (state.scene && state.scene.fog) state.scene.fog.color.copy(state.scene.background);
+  if (state.floorMat) state.floorMat.color.copy(state.scene.background);
+}
 
 function armReveal() {
   if (!state.persCam || !state.renderer) return;
@@ -854,26 +909,27 @@ function armReveal() {
   c.lookAt(REVEAL.fromTgt[0], REVEAL.fromTgt[1], REVEAL.fromTgt[2]);
   c.updateProjectionMatrix();
   if (state.controls) state.controls.enabled = false;
-  state.renderer.toneMappingExposure = REVEAL.fromExposure;
-  if (state.keyLight) state.keyLight.intensity = 0.12;
-  if (state.scene && state.scene.background) state.scene.background.setHex(0x0b0b0d);
-  if (state.scene && state.scene.fog) state.scene.fog.color.setHex(0x0b0b0d);
-  if (state.floorMat) state.floorMat.color.setHex(0x0b0b0d);
-  if (state.loadingEl) state.loadingEl.style.background = "#0a0a0b"; // keep the black continuity from the opener
+  ensureRevealRig(); // pre-car: floor etc.; rebuilt with the car's materials in playReveal
+  revealLights(0);
+  if (state.loadingEl) {
+    state.loadingEl.style.background = "#0a0a0b"; // keep the black continuity from the opener
+    state.loadingEl.classList.add("cine"); // dark spinner variant + instant (no-fade) dismissal
+  }
 }
-
-const REVEAL_DARK = new THREE.Color(0x0b0b0d);
-const REVEAL_LIGHT = new THREE.Color(0xf2f3f5);
 
 function revealApply(u) {
   const s3 = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
-  const e = s3(u);
-  const it = 1 - e;
   const c = state.persCam;
-  // quadratic bezier through a wide side arc
+  const sweep = u <= REVEAL.hold ? 0 : (u - REVEAL.hold) / (1 - REVEAL.hold);
+  const e = s3(sweep);
+  const it = 1 - e;
+  // slow push-in toward the lamp during the hold, fading out as the arc takes over
+  const push = 0.06 * s3(Math.min(1, u / REVEAL.hold)) * it;
+  // quadratic bezier through a side arc
   for (let i = 0; i < 3; i++) {
     const a = REVEAL.fromPos[i], b = REVEAL.toPos[i], q = REVEAL.ctrl[i];
-    c.position.setComponent(i, it * it * a + 2 * it * e * q + e * e * b);
+    c.position.setComponent(i, it * it * a + 2 * it * e * q + e * e * b
+      + (REVEAL.fromTgt[i] - REVEAL.fromPos[i]) * push);
   }
   const tx = REVEAL.fromTgt[0] + (REVEAL.toTgt[0] - REVEAL.fromTgt[0]) * e;
   const ty = REVEAL.fromTgt[1] + (REVEAL.toTgt[1] - REVEAL.fromTgt[1]) * e;
@@ -881,46 +937,95 @@ function revealApply(u) {
   c.lookAt(tx, ty, tz);
   c.fov = REVEAL.fromFov + (REVEAL.toFov - REVEAL.fromFov) * e;
   c.updateProjectionMatrix();
-  // lights come up front-loaded — mostly there by two-thirds through
-  const le = s3(Math.min(1, u * 1.5));
-  state.renderer.toneMappingExposure = REVEAL.fromExposure + (REVEAL.toExposure - REVEAL.fromExposure) * le;
-  if (state.keyLight) state.keyLight.intensity = 0.12 + (1.35 - 0.12) * le;
-  if (state.scene && state.scene.background && state.scene.background.isColor)
-    state.scene.background.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
-  if (state.scene && state.scene.fog) state.scene.fog.color.copy(state.scene.background);
-  if (state.floorMat) state.floorMat.color.copy(state.scene.background);
+  // the lights-up event rides the heart of the sweep and completes just
+  // before the camera lands, so the settle happens in full studio light
+  const le = 0.03 + 0.97 * s3(Math.min(1, Math.max(0, (sweep - REVEAL.lightLag) / REVEAL.lightSpan)));
+  revealLights(le);
 }
 
 function playReveal() {
   if (!revealArmed || revealPlaying || !state.carReady) return Promise.resolve();
   revealPlaying = true;
   revealArmed = false;
+  // rebuild the rig now that the car's materials exist (arm-time dims restored first)
+  releaseRevealRig(true);
+  ensureRevealRig();
   if (REVEAL_DEBUG) { revealApply(Math.min(1, (+REVEAL_DEBUG) / REVEAL.dur)); return new Promise(() => {}); }
   return new Promise((resolve) => {
-    const t0 = performance.now();
-    let ended = false;
+    let ended = false, t0 = null, fallbackId = null;
+    const skipTap = () => {
+      // the tap that skips the reveal must not also pick a glass zone
+      state.suppressPickUntil = performance.now() + 500;
+      finish();
+    };
     const finish = () => {
       if (ended) return;
       ended = true;
-      window.removeEventListener("pointerdown", finish);
+      window.removeEventListener("pointerdown", skipTap);
       window.removeEventListener("keydown", finish);
+      clearTimeout(fallbackId);
+      state.revealTick = null;
+      state.revealWarming = false;
       revealApply(1);
+      releaseRevealRig(true);
       restoreCarCamera();
-      if (state.loadingEl) state.loadingEl.style.background = "";
+      if (state.loadingEl) {
+        state.loadingEl.style.background = "";
+        state.loadingEl.classList.remove("cine");
+      }
       revealPlaying = false;
+      if (PERF_ON) window.__REVEAL_T1 = performance.now();
       resolve();
     };
-    const step = (now) => {
-      if (ended) return;
-      const u = (now - t0) / REVEAL.dur;
-      if (u >= 1) { finish(); return; }
-      revealApply(u);
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    setTimeout(finish, REVEAL.dur + 400);
-    window.addEventListener("pointerdown", finish);
+    window.addEventListener("pointerdown", skipTap);
     window.addEventListener("keydown", finish);
+    const start = () => {
+      state.revealWarming = false;
+      if (ended) return;
+      state.revealTick = (now) => {
+        if (t0 === null) { t0 = now; if (PERF_ON) window.__REVEAL_T0 = t0; }
+        const u = (now - t0) / REVEAL.dur;
+        if (u >= 1) { finish(); return; }
+        revealApply(u);
+      };
+      fallbackId = setTimeout(finish, REVEAL.dur + 600); // hidden-tab rAF throttle guarantee
+    };
+    // Warm the whole pipeline before the clock starts: parallel-compile every
+    // shader, upload every texture, then draw one dark frame (allocates the
+    // transmission target and shadow map). The render loop holds the previous
+    // dark frame meanwhile, so nothing bright or half-compiled is presented.
+    state.revealWarming = true;
+    const warm = async () => {
+      if (ended) return; // skipped while waiting — finish() already restored the studio
+      try {
+        if (state.renderer.compileAsync)
+          await Promise.race([
+            state.renderer.compileAsync(state.scene, state.camera),
+            new Promise((r) => setTimeout(r, 1600)), // don't let a slow driver stall the show
+          ]);
+        else state.renderer.compile(state.scene, state.camera);
+      } catch (_) { /* warm-up is best-effort */ }
+      if (ended) return;
+      try {
+        state.scene.traverse((o) => {
+          const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+          for (const m of ms) for (const k in m) {
+            const v = m[k];
+            if (v && v.isTexture) state.renderer.initTexture(v);
+          }
+        });
+        revealApply(0);
+        state.renderer.render(state.scene, state.camera);
+      } catch (_) { /* warm-up is best-effort */ }
+    };
+    // A hidden tab would burn the whole reveal unseen (rAF is parked, so the
+    // fallback timer would just skip to the end) — wait for first visibility.
+    const whenVisible = () => new Promise((r) => {
+      if (!document.hidden) return r();
+      const on = () => { if (!document.hidden) { document.removeEventListener("visibilitychange", on); r(); } };
+      document.addEventListener("visibilitychange", on);
+    });
+    whenVisible().then(warm).then(start, start);
   });
 }
 
@@ -983,6 +1088,12 @@ window.VIEWER3D = {
   // cinematic reveal (armed by the app before the first car shows)
   armReveal,
   playReveal,
+  revealScrub: (ms) => { ensureRevealRig(); revealApply(Math.min(1, ms / REVEAL.dur)); }, // frame-stepping for visual QA (use with ?revealDebug)
+  renderBench(n = 30) { // wall-clock for n back-to-back renders; QA-only
+    const s = performance.now();
+    for (let i = 0; i < n; i++) state.renderer.render(state.scene, state.camera);
+    return +(performance.now() - s).toFixed(1);
+  },
   // architectural mode
   loadBuilding(cfg) { loadCar({ ...cfg, building: true }); },
   get isBuilding() { return !!state.buildingPrep; },
@@ -992,6 +1103,7 @@ window.VIEWER3D = {
   // returns the zone name under the pointer, or null
   pickZone(clientX, clientY) {
     if (!state.renderer || !state.zoneMeshes || state.buildingPrep) return null;
+    if (state.suppressPickUntil && performance.now() < state.suppressPickUntil) return null; // reveal skip-tap
     const r = state.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - r.left) / r.width) * 2 - 1,
