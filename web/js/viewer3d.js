@@ -870,6 +870,11 @@ const REVEAL_LIGHT = new THREE.Color(0xf2f3f5);
 // Everything env-lit stays bright even at exposure 0.16, so the dark beat has
 // to dim the env map (per-material uniform) and the fill/rim rig too, not just
 // key + exposure. Bases are captured here and restored exactly at finish.
+// The car's lamps do the opposite: emissive lamp materials get driven UP for
+// the dark beat (headlights on) with two beam spotlights pooling on the floor,
+// all dying off as the studio brightens.
+const HEADLAMP_ON = 5.5;   // emissive intensity while the studio is dark
+const HEADBEAM_ON = 8.5;   // spotlight intensity for the floor pools
 function ensureRevealRig() {
   if (state.revealRig) return state.revealRig;
   const mats = new Set();
@@ -877,27 +882,80 @@ function ensureRevealRig() {
     const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
     for (const m of ms) if ("envMapIntensity" in m) mats.add(m);
   });
-  state.revealRig = { env: [...mats].map((m) => [m, m.envMapIntensity]) };
+  // glowing lamp materials + a combined front-lamp bbox (lamp meshes span the
+  // car's full width on some models, so per-side centers collapse to x=0 —
+  // derive the two beam origins from the union box's extents instead)
+  const lampSet = new Set();
+  const frontBox = new THREE.Box3();
+  if (state.carRoot) state.carRoot.traverse((o) => {
+    if (!o.isMesh) return;
+    const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of ms) {
+      if (!m.emissive || m.emissiveIntensity <= 0) continue;
+      if (m.emissive.r + m.emissive.g + m.emissive.b < 0.05) continue;
+      lampSet.add(m);
+      const b = new THREE.Box3().setFromObject(o);
+      if (b.getCenter(new THREE.Vector3()).z > 0.5) frontBox.union(b);
+    }
+  });
+  const spots = [];
+  if (!frontBox.isEmpty()) {
+    const c = frontBox.getCenter(new THREE.Vector3());
+    const halfW = (frontBox.max.x - frontBox.min.x) / 2;
+    for (const sx of [-1, 1]) {
+      const x = c.x + sx * Math.max(0.45, halfW * 0.62);
+      // aimed down like low beams: the pool lands just ahead of the bumper,
+      // inside the dark-beat framing (a far throw would pool behind the camera)
+      const s = new THREE.SpotLight(0xe8f0ff, 0, 12, 0.55, 0.8, 1.0);
+      s.position.set(x, c.y + 0.04, frontBox.max.z + 0.06);
+      s.target.position.set(x * 1.1, 0, frontBox.max.z + 0.55);
+      s.visible = false;
+      state.scene.add(s, s.target);
+      spots.push(s);
+    }
+  }
+  state.revealRig = {
+    env: [...mats].map((m) => [m, m.envMapIntensity]),
+    lamps: [...lampSet].map((m) => [m, m.emissiveIntensity]),
+    spots,
+  };
   return state.revealRig;
 }
 function releaseRevealRig(restore) {
-  if (restore && state.revealRig)
-    for (const [m, v] of state.revealRig.env) m.envMapIntensity = v;
+  const rig = state.revealRig;
+  if (rig) {
+    if (restore) {
+      for (const [m, v] of rig.env) m.envMapIntensity = v;
+      for (const [m, v] of rig.lamps) m.emissiveIntensity = v;
+    }
+    for (const s of rig.spots) { state.scene.remove(s.target); state.scene.remove(s); s.dispose(); }
+  }
   state.revealRig = null;
 }
 
 function revealLights(le) {
+  const s3 = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   state.renderer.toneMappingExposure = REVEAL.fromExposure + (REVEAL.toExposure - REVEAL.fromExposure) * le;
   if (state.keyLight) state.keyLight.intensity = 0.12 + (1.35 - 0.12) * le;
   // 0.4 / 0.55 mirror the studio rig's fill/rim intensities set at mount
   if (state.fillLight) state.fillLight.intensity = 0.4 * (0.05 + 0.95 * le);
   if (state.rimLight) state.rimLight.intensity = 0.55 * (0.08 + 0.92 * le);
-  if (state.revealRig)
+  if (state.revealRig) {
     for (const [m, base] of state.revealRig.env) m.envMapIntensity = base * (0.05 + 0.95 * le);
+    // headlights burn through the dark beat, then switch off as the room brightens
+    const on = 1 - s3(Math.min(1, Math.max(0, (le - 0.22) / 0.5)));
+    for (const [m, base] of state.revealRig.lamps)
+      m.emissiveIntensity = base + Math.max(0, HEADLAMP_ON - base) * on;
+    for (const s of state.revealRig.spots) {
+      s.intensity = HEADBEAM_ON * on;
+      s.visible = on > 0.02;
+    }
+  }
   if (state.scene && state.scene.background && state.scene.background.isColor)
     state.scene.background.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
   if (state.scene && state.scene.fog) state.scene.fog.color.copy(state.scene.background);
-  if (state.floorMat) state.floorMat.color.copy(state.scene.background);
+  // floor keeps its real albedo: with env/fill/rim dimmed it goes dark on its
+  // own, and a black-painted floor would swallow the headlight pools entirely
 }
 
 function armReveal() {
@@ -1089,6 +1147,13 @@ window.VIEWER3D = {
   armReveal,
   playReveal,
   revealScrub: (ms) => { ensureRevealRig(); revealApply(Math.min(1, ms / REVEAL.dur)); }, // frame-stepping for visual QA (use with ?revealDebug)
+  revealRigInfo() { // QA: what the reveal rig collected
+    const r = state.revealRig;
+    return r && {
+      lamps: r.lamps.map(([m, b]) => [m.name, b, m.emissiveIntensity]),
+      spots: r.spots.map((s) => ({ pos: s.position.toArray().map((v) => +v.toFixed(2)), int: +s.intensity.toFixed(2), vis: s.visible })),
+    };
+  },
   renderBench(n = 30) { // wall-clock for n back-to-back renders; QA-only
     const s = performance.now();
     for (let i = 0; i < n; i++) state.renderer.render(state.scene, state.camera);
