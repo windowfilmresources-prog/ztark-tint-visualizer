@@ -899,14 +899,38 @@ window.VIEWER3D = {
     }
     return null;
   },
-  // brief emissive pulse on a zone so picking feels tactile
+  // soft emissive pulse on a zone so picking feels tactile: instant on (no lag,
+  // and background-tab-proof), eased fade-out, gentle color + intensity so the
+  // geometry-split zone edges don't read as a hard painted slab
   flashZone(zone) {
     const m = state.zoneMats && state.zoneMats[zone];
-    if (!m) return;
-    const orig = m.emissive ? m.emissive.getHex() : 0;
-    m.emissive && m.emissive.setHex(0x2a6fb8);
-    m.emissiveIntensity = 0.9;
-    setTimeout(() => { m.emissive && m.emissive.setHex(orig); m.emissiveIntensity = 0; }, 380);
+    if (!m || !m.emissive) return;
+    state.flashGen = (state.flashGen || 0) + 1;
+    const gen = state.flashGen;
+    ZONES.forEach((z) => {                       // clear any superseded pulse
+      const zm = state.zoneMats[z];
+      if (zm) zm.emissiveIntensity = 0;
+    });
+    m.emissive.setHex(0x5e93cf);
+    const PEAK = 0.6, HOLD = 140, DOWN = 420;
+    m.emissiveIntensity = PEAK;                  // synchronous — immediate feedback
+    const t0 = performance.now();
+    const smooth = (u) => u * u * (3 - 2 * u);
+    const tick = (now) => {
+      if (gen !== state.flashGen) return;
+      const t = now - t0;
+      if (t < HOLD) { requestAnimationFrame(tick); return; }
+      if (t < HOLD + DOWN) {
+        m.emissiveIntensity = PEAK * (1 - smooth((t - HOLD) / DOWN));
+        requestAnimationFrame(tick);
+        return;
+      }
+      m.emissiveIntensity = 0;
+    };
+    requestAnimationFrame(tick);
+    setTimeout(() => {                           // rAF can be throttled in hidden tabs
+      if (gen === state.flashGen) m.emissiveIntensity = 0;
+    }, HOLD + DOWN + 150);
   },
   setView(x, y, z) { if (state.camera) { state.camera.position.set(x, y, z); state.controls.update(); } },
   snapshot(w = 900, q = 0.82) {
