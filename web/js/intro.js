@@ -10,6 +10,9 @@
   var cfg = BRAND && BRAND.intro;
   if (!cfg || qs.get("nointro")) return;
 
+  var resolveDone;
+  window.__INTRO_DONE = new Promise(function (r) { resolveDone = r; });
+
   var debugT = qs.get("introDebug");
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -76,6 +79,7 @@
   function dismiss() {
     if (done) return;
     done = true;
+    resolveDone();
     el.classList.add("bi-out");
     setTimeout(function () {
       el.remove();

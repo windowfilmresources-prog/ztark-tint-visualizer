@@ -190,8 +190,24 @@
         wireStagePicking();
         applyTint();
       };
-      if (window.VIEWER3D) boot();
-      else document.addEventListener("viewer3d-ready", boot, { once: true });
+      const bootWhenReady = () => {
+        if (window.VIEWER3D) boot();
+        else document.addEventListener("viewer3d-ready", boot, { once: true });
+      };
+      if (window.__INTRO_DONE) {
+        // brand opener playing: hold the GPU-heavy viewer boot (context, PMREM,
+        // shader compiles) until it dismisses; meanwhile warm the model bytes —
+        // a plain fetch costs network only and makes the real load near-instant
+        const warm = () => {
+          const f = window.VIEWER3D && window.VIEWER3D.fleet && window.VIEWER3D.fleet[0];
+          if (f && f.urls) fetch(f.urls[0]).catch(() => {});
+        };
+        if (window.VIEWER3D) warm();
+        else document.addEventListener("viewer3d-ready", warm, { once: true });
+        window.__INTRO_DONE.then(bootWhenReady);
+      } else {
+        bootWhenReady();
+      }
       return;
     }
     const v = FLEET2D.find((x) => x.id === S.vehicle) || FLEET2D[0];
