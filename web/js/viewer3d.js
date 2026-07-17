@@ -254,6 +254,7 @@ function applyBuildingView(view) {
     cam.position.copy(center).addScaledVector(dir, 16);
     cam.lookAt(center.x, center.y * 0.92, center.z);
     state.orthoHeight = Math.max(size.y * 1.3, Math.max(size.x, size.z) * 0.95);
+    state.orthoWidth = Math.max(size.x, size.z) * 1.04;
     cam.near = 0.1; cam.far = 60;
     state.camera = cam;
   }
@@ -262,6 +263,7 @@ function applyBuildingView(view) {
 
 function restoreCarCamera() {
   if (state.interiorFill) state.interiorFill.visible = false;
+  if (state.scene) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
   if (state.keyLight) state.keyLight.position.set(4.5, 6.5, 3.5);
   const cam = state.persCam;
   cam.fov = 38;
@@ -628,6 +630,7 @@ function loadCar(cfg) {
     if (prep.building) {
       state.buildingPrep = prep;
       state.buildingIsoDir = cfg.isoDir || [1, 0.62, -1];
+      state.scene.fog = null; // car-tuned fog (10..26) would haze the diorama at ortho distance 16
       clearPlates(); // the outgoing car's license plates must not float in the diorama
       if (state.controls) state.controls.enabled = false; // locked isometric view
       applyBuildingView(state.buildingView || "exterior");
@@ -647,7 +650,8 @@ function loadCar(cfg) {
   const fail = (msg) => {
     if (isStale()) return; // a stale failure must not nuke a working view
     setLoading(msg, false);
-    document.dispatchEvent(new Event("viewer3d-unavailable"));
+    document.dispatchEvent(new CustomEvent("viewer3d-unavailable",
+      { detail: { building: !!(cfg && cfg.building) } }));
   };
 
   if (cfg.proc) {
@@ -796,13 +800,21 @@ function mount(container) {
   resize();
 
   // render only while BOTH the tab is visible AND the stage is on screen
-  const loop = () => { controls.update(); renderer.render(scene, camera); };
+  // live refs, not the mount-time closure: building mode swaps state.camera
+  // (ortho iso / interior), and a disabled OrbitControls must not keep driving
+  // the camera back to its orbit position every frame
+  const loop = () => {
+    if (state.controls && state.controls.enabled) state.controls.update();
+    state.renderer.render(state.scene, state.camera);
+  };
   const applyRunning = () => renderer.setAnimationLoop(state.visible && state.intersecting ? loop : null);
   applyRunning();
+  // observe the CANVAS, not the container: the stage div is rebuilt on every
+  // space switch and a detached target latches isIntersecting=false forever
   new IntersectionObserver((entries) => {
     state.intersecting = entries[0].isIntersecting;
     applyRunning();
-  }).observe(container);
+  }).observe(renderer.domElement);
   document.addEventListener("visibilitychange", () => {
     state.visible = !document.hidden;
     applyRunning();
@@ -823,7 +835,8 @@ function resize() {
   state.renderer.setSize(w, h);
   const aspect = w / h;
   if (state.camera.isOrthographicCamera) {
-    const hh = state.orthoHeight / 2;
+    const fitH = Math.max(state.orthoHeight, (state.orthoWidth || 0) / aspect);
+    const hh = fitH / 2;
     state.camera.top = hh; state.camera.bottom = -hh;
     state.camera.left = -hh * aspect; state.camera.right = hh * aspect;
   } else {

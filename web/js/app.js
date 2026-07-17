@@ -83,6 +83,17 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // innerHTML rebuilds destroy keyboard focus; call before the rebuild, invoke
+  // the returned fn after wiring to land focus on the now-active button
+  function keepFocus(el) {
+    const had = el && el.contains(document.activeElement);
+    return () => {
+      if (!had) return;
+      const t = el.querySelector(".active") || el.querySelector("button");
+      if (t) t.focus();
+    };
+  }
+
   // Renderer priority: 3D showroom → traced photos → vector art.
   let MODE_3D = true;
   let PHOTO_MODE, FLEET2D;
@@ -96,13 +107,17 @@
     if (!MODE_3D) return;
     MODE_3D = false;
     computeModes();
+    if (S.space !== "vehicles") enterSpace("vehicles"); // buildings need 3D
     S.vehicle = FLEET2D[0].id;
     renderStageTools();
     renderVehicle();
     renderZoneBar();
     renderShades();
   }
-  document.addEventListener("viewer3d-unavailable", abandon3D);
+  document.addEventListener("viewer3d-unavailable", (e) => {
+    if (e.detail && e.detail.building) return; // diorama failed; the car showroom is fine
+    abandon3D();
+  });
   setTimeout(() => { if (MODE_3D && !window.VIEWER3D) abandon3D(); }, 8000);
 
   // ---------- stage / vehicle ----------
@@ -114,8 +129,13 @@
   function bSel() { return S.b[S.space]; }
   function bSeries() { return BCAT.products[bSel().series]; }
 
-  function bFilm() {
+  function bShade() {
     const sel = bSel().shade;
+    return sel && sel.seriesIdx === bSel().series ? sel : null;
+  }
+
+  function bFilm() {
+    const sel = bShade();
     return sel ? { vlt: sel.vlt, refl: sel.refl || 0, tone: sel.tone || null } : null;
   }
 
@@ -123,7 +143,9 @@
     const scene = BSCENES[S.space];
     $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
       <div id="viewer3d"></div>
-      <div class="stage-hint" id="stageHint">Locked isometric view — switch to Interior to look out through the glass</div>
+      <div class="stage-hint" id="stageHint">${(bSel().view || "exterior") === "interior"
+        ? "Interior view — pick a film to see the difference"
+        : "Isometric view — switch to Interior to look out through the glass"}</div>
       <div class="photo-credit" id="modelCredit"></div>`;
     const boot = () => {
       if (S.space === "vehicles") return; // user already left the space
@@ -156,12 +178,17 @@
         const el = document.getElementById("viewer3d");
         if (!el) return;
         window.VIEWER3D.mount(el);
+        if (window.VIEWER3D.isBuilding) {
+          // a building space replaced the car in the scene — reload the car
+          window.VIEWER3D.loadCar(S.vehicle);
+        } else if (window.VIEWER3D.credit) {
+          // car still loaded: no car-loaded event will fire — re-run its
+          // listener so credit/tabs re-render
+          document.dispatchEvent(new Event("viewer3d-car-loaded"));
+        }
         window.VIEWER3D.setPaint(S.paint);
         wireStagePicking();
         applyTint();
-        // returning from a building space: the car is already loaded, so no
-        // car-loaded event will fire — re-run its listener for credit/tabs
-        if (window.VIEWER3D.credit) document.dispatchEvent(new Event("viewer3d-car-loaded"));
       };
       if (window.VIEWER3D) boot();
       else document.addEventListener("viewer3d-ready", boot, { once: true });
@@ -274,7 +301,8 @@
     const el = $("vltBadge");
     if (!el) return;
     if (S.space !== "vehicles") {
-      const sel = bSel().shade;
+      if (S.comparing) { el.textContent = "Bare glass (comparing)"; return; }
+      const sel = bShade();
       el.textContent = sel
         ? `${bSeries().name} · ${sel.name || (sel.sku ?? sel.vlt) + "%"}`
         : "Bare glass — pick a film";
@@ -293,14 +321,22 @@
     S.space = space;
     const auto = space === "vehicles";
     // cards that only make sense for vehicles
+    // the shade chips live in the same card as the zone bar — hide only the
+    // vehicle-specific rows, never the card (or buildings lose the film picker)
     const zoneCard = $("zoneBar") && $("zoneBar").closest(".card");
+    if ($("zoneBar")) $("zoneBar").style.display = auto ? "" : "none";
+    if ($("zoneNote")) $("zoneNote").style.display = auto ? "" : "none";
+    if (zoneCard) {
+      const h2 = zoneCard.querySelector("h2");
+      if (h2) h2.textContent = auto ? "Windows & Shade" : "Film Shade";
+    }
     const lawCard = $("lawSelect") && $("lawSelect").closest(".card");
-    if (zoneCard) zoneCard.style.display = auto ? "" : "none";
     if (lawCard) lawCard.style.display = auto ? "" : "none";
     const sub = $("heroSub");
     if (sub) sub.textContent = auto ? (BRAND.hero.sub || "") : (BCAT.heroSub || BRAND.hero.sub || "");
     const pt = $("pageTitle");
     if (pt && BRAND.pageTitle) pt.textContent = auto ? BRAND.pageTitle : "Architectural Film Viewer";
+    $("disclaimer").textContent = auto ? VEHICLE_DISCLAIMER : BUILDING_DISCLAIMER;
     renderStageTools();
     renderVehicle();
     renderSeries();
@@ -310,20 +346,24 @@
 
   function renderSpaceTabs() {
     let el = $("spaceTabs");
-    if (!BCAT) { if (el) el.parentElement.style.display = "none"; return; }
+    if (!BCAT || !MODE_3D) { if (el) el.parentElement.style.display = "none"; return; }
     if (!el) {
       const group = document.createElement("div");
       group.className = "group";
-      group.innerHTML = `<span class="group-label">Space</span><span id="spaceTabs" class="group"></span>`;
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "Space");
+      group.innerHTML = `<span class="group-label" aria-hidden="true">Space</span><span id="spaceTabs" class="group"></span>`;
       const tools = document.querySelector(".stage-tools");
       tools.insertBefore(group, tools.firstChild);
       el = $("spaceTabs");
     }
     const spaces = [["vehicles", "Vehicles"], ["residential", "Residential"], ["commercial", "Commercial"]];
+    const refocus = keepFocus(el);
     el.innerHTML = spaces.map(([id, label]) =>
-      `<button class="veh-btn ${S.space === id ? "active" : ""}" data-s="${id}">${label}</button>`).join("");
+      `<button class="veh-btn ${S.space === id ? "active" : ""}" aria-pressed="${S.space === id}" data-s="${id}">${label}</button>`).join("");
     el.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => enterSpace(b.dataset.s)));
+    refocus();
   }
 
   function renderViewTabs(show) {
@@ -332,21 +372,29 @@
     if (!el) {
       const group = document.createElement("div");
       group.className = "group";
-      group.innerHTML = `<span class="group-label">View</span><span id="viewTabs" class="group"></span>`;
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "View");
+      group.innerHTML = `<span class="group-label" aria-hidden="true">View</span><span id="viewTabs" class="group"></span>`;
       const spaceGroup = $("spaceTabs").parentElement;
       spaceGroup.parentElement.insertBefore(group, spaceGroup.nextSibling);
       el = $("viewTabs");
     }
     el.parentElement.style.display = "";
     const cur = bSel().view || "exterior";
+    const refocus = keepFocus(el);
     el.innerHTML = [["exterior", "Exterior"], ["interior", "Interior"]].map(([id, label]) =>
-      `<button class="veh-btn ${cur === id ? "active" : ""}" data-view="${id}">${label}</button>`).join("");
+      `<button class="veh-btn ${cur === id ? "active" : ""}" aria-pressed="${cur === id}" data-view="${id}">${label}</button>`).join("");
     el.querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
         bSel().view = b.dataset.view;
         if (window.VIEWER3D) window.VIEWER3D.setBuildingView(b.dataset.view);
+        const hint = $("stageHint");
+        if (hint) hint.textContent = b.dataset.view === "interior"
+          ? "Interior view — pick a film to see the difference"
+          : "Isometric view — switch to Interior to look out through the glass";
         renderViewTabs(true);
       }));
+    refocus();
   }
 
   // ---------- stage tools ----------
@@ -365,8 +413,9 @@
       tabs.parentElement.style.display = "none";
     } else {
       tabs.parentElement.style.display = "";
+      const refocusVeh = keepFocus(tabs);
       tabs.innerHTML = fleet.map((v) =>
-        `<button class="veh-btn ${v.id === S.vehicle ? "active" : ""}" data-v="${v.id}">${v.label}</button>`).join("");
+        `<button class="veh-btn ${v.id === S.vehicle ? "active" : ""}" aria-pressed="${v.id === S.vehicle}" data-v="${v.id}">${v.label}</button>`).join("");
       tabs.querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => {
           if (b.dataset.v === S.vehicle) return; // already showing this vehicle
@@ -374,11 +423,12 @@
           if (MODE_3D) { window.VIEWER3D.loadCar(S.vehicle); renderStageTools(); }
           else { renderStageTools(); renderVehicle(); }
         }));
+      refocusVeh();
     }
 
     $("paints").parentElement.style.display = PHOTO_MODE ? "none" : "";
     $("paints").innerHTML = PAINTS.map(([n, c]) =>
-      `<button type="button" class="swatch ${c === S.paint ? "active" : ""}" title="${n}" aria-label="Paint: ${n}" data-c="${c}" style="background:${c}"></button>`).join("");
+      `<button type="button" class="swatch ${c === S.paint ? "active" : ""}" aria-pressed="${c === S.paint}" title="${n}" aria-label="Paint: ${n}" data-c="${c}" style="background:${c}"></button>`).join("");
     $("paints").querySelectorAll(".swatch").forEach((s) =>
       s.addEventListener("click", () => {
         S.paint = s.dataset.c;
@@ -403,14 +453,17 @@
     const building = S.space !== "vehicles";
     const products = building ? BCAT.products : BRAND.products;
     const active = building ? bSel().series : S.series;
+    const refocus = keepFocus($("seriesTabs"));
     $("seriesTabs").innerHTML = products.map((p, i) =>
-      `<button class="series-tab ${i === active ? "active" : ""}" data-i="${i}">${p.name}</button>`).join("");
+      `<button class="series-tab ${i === active ? "active" : ""}" aria-pressed="${i === active}" data-i="${i}">${p.name}</button>`).join("");
     $("seriesTabs").querySelectorAll("button").forEach((b) =>
       b.addEventListener("click", () => {
         if (building) bSel().series = +b.dataset.i;
         else S.series = +b.dataset.i;
         renderSeries(); renderShades(); renderSpecs();
+        if (building) updateBuildingFilm(); // stale-series shade no longer applies
       }));
+    refocus();
     $("seriesDesc").textContent = curSeries().tagline || "";
     $("seriesTech").textContent = curSeries().tech || "";
     $("seriesTech").style.display = curSeries().tech ? "inline-block" : "none";
@@ -430,14 +483,15 @@
     if (S.space !== "vehicles") return renderBuildingShades();
     const cur = activeShadeVlt();
     const anySet = activeZones().some((z) => S.shades[z]);
+    const refocus = keepFocus($("shadeChips"));
     $("shadeChips").innerHTML =
-      `<button class="shade-chip factory ${!anySet ? "active" : ""}" data-factory="1">
+      `<button class="shade-chip factory ${!anySet ? "active" : ""}" aria-pressed="${!anySet}" data-factory="1">
         <div class="dot" style="--dot:hsl(205,15%,88%)"></div>
         <div class="pct">—</div><div class="sub">Factory</div>
       </button>` +
       series().shades.map((s) => {
         const l = Math.round(14 + s.vlt * 0.72);
-        return `<button class="shade-chip ${s.vlt === cur ? "active" : ""}" data-vlt="${s.vlt}" data-sku="${s.sku ?? s.vlt}">
+        return `<button class="shade-chip ${s.vlt === cur ? "active" : ""}" aria-pressed="${s.vlt === cur}" data-vlt="${s.vlt}" data-sku="${s.sku ?? s.vlt}">
           <div class="dot" style="--dot:hsl(208,10%,${l}%)"></div>
           <div class="pct">${s.sku ?? s.vlt}%</div><div class="sub">Shade</div>
         </button>`;
@@ -452,28 +506,31 @@
         }
         renderShades(); renderSpecs(); applyTint();
       }));
+    refocus();
   }
 
   function renderBuildingShades() {
     const b = bSel();
-    const cur = b.shade;
+    const cur = bShade();
+    const refocus = keepFocus($("shadeChips"));
     $("shadeChips").innerHTML =
-      `<button class="shade-chip factory ${!cur ? "active" : ""}" data-factory="1">
+      `<button class="shade-chip factory ${!cur ? "active" : ""}" aria-pressed="${!cur}" data-factory="1">
         <div class="dot" style="--dot:hsl(205,15%,88%)"></div>
         <div class="pct">—</div><div class="sub">Bare</div>
       </button>` +
       bSeries().shades.map((s, i) => {
         const l = Math.round(14 + s.vlt * 0.72);
-        return `<button class="shade-chip ${cur && cur.vlt === s.vlt && cur.sku === s.sku ? "active" : ""}" data-i="${i}">
+        return `<button class="shade-chip ${cur && cur.vlt === s.vlt && cur.sku === s.sku ? "active" : ""}" aria-pressed="${!!(cur && cur.vlt === s.vlt && cur.sku === s.sku)}" data-i="${i}">
           <div class="dot" style="--dot:hsl(${s.tone === "warm" ? "28,30%" : "208,10%"},${l}%)"></div>
           <div class="pct">${s.sku}%</div><div class="sub">${s.name ? "Film" : "Shade"}</div>
         </button>`;
       }).join("");
     $("shadeChips").querySelectorAll(".shade-chip").forEach((btn) =>
       btn.addEventListener("click", () => {
-        b.shade = btn.dataset.factory ? null : { ...bSeries().shades[+btn.dataset.i] };
+        b.shade = btn.dataset.factory ? null : { ...bSeries().shades[+btn.dataset.i], seriesIdx: b.series };
         renderBuildingShades(); renderSpecs(); updateBuildingFilm();
       }));
+    refocus();
   }
 
   function shadeMini(sel) {
@@ -488,11 +545,12 @@
     const zoneIds = MODE_3D ? ZONES : ["front", "rear"];
     if (!MODE_3D && !zoneIds.includes(S.zoneMode) && S.zoneMode !== "all") S.zoneMode = "all";
     const zones = [["all", "All windows"], ...zoneIds.map((z) => [z, ZONE_LABELS[z]])];
+    const refocus = keepFocus(el);
     el.innerHTML = zones.map(([z, label]) => {
       const mini = z === "all"
         ? ""
         : `<span class="zone-mini">${shadeMini(S.shades[z])}</span>`;
-      return `<button class="zone-tab ${S.zoneMode === z ? "active" : ""}" data-z="${z}">
+      return `<button class="zone-tab ${S.zoneMode === z ? "active" : ""}" aria-pressed="${S.zoneMode === z}" data-z="${z}">
         <span>${label}</span>${mini}</button>`;
     }).join("");
     el.querySelectorAll("button").forEach((b) =>
@@ -501,6 +559,7 @@
         if (MODE_3D && window.VIEWER3D && b.dataset.z !== "all") window.VIEWER3D.flashZone(b.dataset.z);
         renderZoneBar(); renderShades(); renderSpecs();
       }));
+    refocus();
     const note = $("zoneNote");
     if (note) {
       note.textContent = S.zoneMode === "all"
@@ -514,7 +573,7 @@
   function renderSpecs() {
     let sh, warranty;
     if (S.space !== "vehicles") {
-      sh = bSel().shade || bSeries().shades[0];
+      sh = bShade() || bSeries().shades[0];
       warranty = bSeries().warranty;
       const cells = [
         [sh.vlt + "%", "VLT"],
@@ -591,9 +650,12 @@
   }
 
   // ---------- footer ----------
-  $("disclaimer").textContent =
+  const VEHICLE_DISCLAIMER =
     "Visual renderings are for illustrative purposes only; actual appearance of windows treated with film will vary with vehicle, glass, and lighting. " +
     window.TINT_LAWS.meta.disclaimer + ` Tint-law data last reviewed ${window.TINT_LAWS.meta.lastReviewed}.`;
+  const BUILDING_DISCLAIMER =
+    "Visual renderings are concept illustrations for demonstration only — not your building. Actual film appearance and performance vary with glass type, orientation, and installation; confirm specifications with your dealer.";
+  $("disclaimer").textContent = VEHICLE_DISCLAIMER;
 
   // ---------- boot ----------
   const def = BRAND.defaultShade; // {seriesIdx, vlt, sku} optional

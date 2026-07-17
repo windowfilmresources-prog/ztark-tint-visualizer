@@ -104,6 +104,8 @@ main > * { min-width: 0; } /* canvas intrinsic size must not blow out the grid c
   position: absolute; bottom: 10px; left: 14px; font-size: 11px;
   color: rgba(20,26,32,.55); background: rgba(255,255,255,.6);
   padding: 4px 10px; border-radius: 999px; pointer-events: none;
+  max-width: calc(100% - 260px); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
 }
 @media (max-width: 560px) { .stage-hint { display: none; } }
 
@@ -130,7 +132,7 @@ main > * { min-width: 0; } /* canvas intrinsic size must not blow out the grid c
 
 /* stage toolbar */
 .stage-tools { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 14px; }
-.stage-tools .group { display: flex; gap: 6px; align-items: center; }
+.stage-tools .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .stage-tools .group-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted, #888); margin-right: 2px; }
 
 .veh-btn, .toggle-btn {
