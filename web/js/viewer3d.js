@@ -36,7 +36,6 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/corvette/car.glb?v=2"],
     credit: "Vehicle 3D model © Martin Trafas · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a",
-    plates: { front: { y: 0.40, w: 0.42 }, rear: { y: 0.72, w: 0.42 } },
   },
   {
     id: "truck",
@@ -44,7 +43,6 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/truck/truck.glb?v=4"], // bump ?v= when the model file changes
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5",
-    plates: { front: { y: 0.42, w: 0.46 }, rear: { y: 0.76, w: 0.46 } },
   },
   {
     id: "suv",
@@ -52,7 +50,6 @@ const DEFAULT_FLEET = [
     urls: ["assets/models/suv/suv.glb?v=3"],
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
-    plates: { front: { y: 0.46, w: 0.44 }, rear: { y: 0.84, w: 0.44 } },
   },
 ];
 
