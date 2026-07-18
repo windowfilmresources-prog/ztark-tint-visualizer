@@ -27,6 +27,7 @@ window.BRANDS = {
     },
     defaultPaint: "#e8eaec",
     plate: { bg: "#f6f7f5", fg: "#2b2b2b", border: "#81bd41", logo: "assets/plate-huper.png", text: "HÜPER OPTIK", sub: "NANO-CERAMIC", font: "'Abel','Arial Narrow',sans-serif" },
+    intro: { kind: "letters", heat: true, logo: "assets/intro-huper-word.png", sub: "COMFORT WITHOUT COMPROMISE", bg: "#f7f6f2", accent: "#81bd41", fg: "#3c3c40", dim: "rgba(30,30,34,.38)", font: "'Abel','Arial Narrow',sans-serif", lineDelay: 0.9 },
     defaultShade: { seriesIdx: 0, vlt: 30, sku: 30 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://www.huperoptikusa.com/store-locator-view/", dealerCta: "Find a Dealer Near You",
@@ -102,7 +103,7 @@ window.BRANDS = {
     },
     defaultPaint: "#1a1c1f",
     plate: { bg: "#0c0c0d", fg: "#ffffff", border: "#a91e22", logo: "assets/plate-autobahn.png", text: "AUTOBAHN", sub: "NO LIMITS", font: "'Orbitron',sans-serif" },
-    intro: { logo: "assets/plate-autobahn.png", roadVector: true, sub: "NO LIMITS", bg: "#0a0a0b", accent: "#a91e22", font: "'Orbitron',sans-serif" },
+    intro: { kind: "letters", logo: "assets/plate-autobahn.png", roadVector: true, sub: "NO LIMITS", bg: "#0a0a0b", accent: "#a91e22", font: "'Orbitron',sans-serif" },
     defaultShade: { seriesIdx: 1, vlt: 15, sku: 15 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://autobahnwindowfilms.com/dealer-locator/", dealerCta: "Find a Dealer Near You",
@@ -182,6 +183,7 @@ window.BRANDS = {
     },
     defaultPaint: "#1a1c1f",
     plate: { bg: "#f7f8fa", fg: "#0d1b3d", border: "#0d1b3d", logo: "assets/plate-edge.png", text: "EDGE", sub: "TINT · PPF · COATINGS", font: "'Gothic A1',sans-serif" },
+    intro: { kind: "strike", rule: false, logo: "assets/intro-edge-word.png", sub: "ENGINEERED TO ELEVATE", bg: "#ffffff", accent: "#0d1b3d", fg: "#0d1b3d", dim: "rgba(13,27,61,.4)", font: "'Gothic A1',sans-serif" },
     defaultShade: { seriesIdx: 0, vlt: 20, sku: 20 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://programedge.com/dealer-locator/", dealerCta: "Find a Dealer Near You",

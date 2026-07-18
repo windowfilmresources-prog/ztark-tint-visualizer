@@ -1,8 +1,10 @@
-// Animated brand opener — the official mark genuinely rebuilt, not a masked
-// image: each road lane is a traced vector path that draws along its own spine,
-// and the wordmark letters (sliced from the official art) rise in one by one.
-// Config-driven from BRANDS[brand].intro; plays every load (masks the 3D model
-// load); skip on any input; ?introDebug=<ms> freezes for review; ?nointro=1 off.
+// Animated brand opener — each brand's mark genuinely rebuilt in its own
+// language, not a masked image. Autobahn: road lanes draw along traced spines,
+// letters type in. Hüper: a warm heat wash cools as the film line sweeps down,
+// letters type in. Edge: the signature strike-line draws first and the mark
+// blooms around it. Config-driven from BRANDS[brand].intro; plays every load
+// (masks the 3D model load); skip on any input; ?introDebug=<ms> freezes for
+// review; ?nointro=1 off.
 (function () {
   var qs = new URLSearchParams(location.search);
   var brandId = (qs.get("brand") || "huper").toLowerCase();
@@ -16,20 +18,47 @@
   var debugT = qs.get("introDebug");
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  var fg = cfg.fg || "#fff";
+  var dim = cfg.dim || "rgba(255,255,255,.35)";
+  var kind = cfg.kind || "letters";
+
   var ROAD_SVG =
     '<div class="bi-road" aria-hidden="true"><svg class="bi-lane bi-lane0" viewBox="0 0 1200 348"><defs><mask id="biM0"><path d="M 191 393 L 161 330 L 152 312 L 148 294 L 144 276 L 143 258 L 144 240 L 147 222 L 154 204 L 162 186 L 176 168 L 192 150 L 214 132 L 242 114 L 340 82 L 370 73 L 400 66 L 430 61 L 460 58 L 490 54 L 520 52 L 550 50 L 580 48 L 610 47 L 640 46 L 670 46 L 700 46 L 730 47 L 760 48 L 810 48" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="310" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine0"/></mask></defs><g mask="url(#biM0)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M5455 3059 c-1083 -30 -2107 -165 -2817 -370 -919 -265 -1573 -655 -2043 -1219 -222 -267 -421 -682 -476 -994 -20 -114 -26 -285 -10 -302 6 -5 573 -8 1512 -6 l1502 2 -49 53 c-100 106 -361 487 -441 644 -360 703 48 1361 1057 1706 717 246 1827 370 3555 397 761 12 845 17 585 36 -749 54 -1633 74 -2375 53z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane1" viewBox="0 0 1200 348"><defs><mask id="biM1"><path d="M 356 211 L 425 221 L 450 224 L 475 228 L 500 224 L 525 219 L 550 205 L 575 202 L 600 204 L 625 203 L 650 201 L 675 192 L 651 115 L 670 100 L 699 85 L 800 68 L 825 66 L 850 65 L 875 64 L 900 64 L 925 64 L 950 64 L 1000 65" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="320" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine1"/></mask></defs><g mask="url(#biM1)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M7640 2883 c-30 -1 -152 -7 -270 -13 -384 -19 -1125 -79 -1435 -116 -358 -42 -569 -101 -605 -168 -6 -13 -13 -48 -14 -79 -3 -75 -16 -87 -144 -138 -699 -278 -1037 -680 -991 -1180 30 -322 242 -676 579 -968 l65 -56 1284 3 1285 2 -210 126 c-708 424 -1124 775 -1220 1029 -101 271 -67 447 126 636 391 382 1084 631 2140 768 396 51 991 91 1380 91 420 1 205 22 -560 55 -290 13 -1218 18 -1410 8z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane2" viewBox="0 0 1200 348"><defs><mask id="biM2"><path d="M 1250 334 L 1180 328 L 1155 326 L 1130 324 L 1105 322 L 1080 320 L 1055 302 L 1030 290 L 1005 281 L 980 274 L 955 269 L 930 264 L 905 261 L 880 256 L 855 252 L 830 248 L 805 242 L 780 231 L 755 213 L 730 204 L 705 200 L 680 195 L 655 191 L 606 183" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="300" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine2"/></mask></defs><g mask="url(#biM2)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M9605 2704 c-33 -2 -152 -8 -265 -14 -1070 -56 -2197 -307 -2606 -580 -106 -71 -250 -218 -292 -297 -53 -101 -59 -261 -15 -398 110 -341 527 -714 1280 -1145 l191 -110 2051 0 c1195 0 2051 4 2051 9 0 5 -10 11 -22 14 -31 8 -282 56 -343 67 -398 68 -1052 192 -1900 361 -1106 220 -1764 482 -2091 832 -121 128 -153 267 -93 397 85 182 418 394 830 528 464 151 1174 259 1918 292 130 6 265 14 301 18 l65 6 -100 7 c-119 8 -874 18 -960 13z" fill="#ffcf00"/></g></g></g></svg></div>';
+
+  // Per-brand letter slice CSS, generated from each wordmark's alpha column
+  // profile (margin/width/bg-size/bg-position map each span to one letter).
+  var SLICES = {
+    autobahn:
+      "#brandIntro .bi-l0{margin-left:2.917%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:3.256%;animation-delay:0.05s}#brandIntro .bi-l1{margin-left:1.833%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:16.914%;animation-delay:0.10s}#brandIntro .bi-l2{margin-left:1.333%;width:6.583%;aspect-ratio:0.3798;background-size:1518.99% 100%;background-position-x:28.724%;animation-delay:0.14s}#brandIntro .bi-l3{margin-left:1.333%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:38.791%;animation-delay:0.18s}#brandIntro .bi-l4{margin-left:1.583%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:52.186%;animation-delay:0.23s}#brandIntro .bi-l5{margin-left:1.083%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:64.963%;animation-delay:0.27s}#brandIntro .bi-l6{margin-left:1.667%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:78.346%;animation-delay:0.32s}#brandIntro .bi-l7{margin-left:1.333%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:91.442%;animation-delay:0.36s}#brandIntro .bi-l8{margin-left:1.333%;width:3.333%;aspect-ratio:0.1923;background-size:3000.00% 100%;background-position-x:96.897%;animation-delay:0.41s}",
+    huper:
+      "#brandIntro .bi-l0{margin-left:0.000%;width:11.373%;aspect-ratio:0.6960;background-size:879.31% 100%;background-position-x:0.000%;animation-delay:0.05s}#brandIntro .bi-l1{margin-left:1.176%;width:10.065%;aspect-ratio:0.6160;background-size:993.51% 100%;background-position-x:13.953%;animation-delay:0.10s}#brandIntro .bi-l2{margin-left:1.176%;width:8.366%;aspect-ratio:0.5120;background-size:1195.31% 100%;background-position-x:25.963%;animation-delay:0.14s}#brandIntro .bi-l3{margin-left:0.784%;width:7.190%;aspect-ratio:0.4400;background-size:1390.91% 100%;background-position-x:35.493%;animation-delay:0.18s}#brandIntro .bi-l4{margin-left:1.046%;width:9.542%;aspect-ratio:0.5840;background-size:1047.95% 100%;background-position-x:45.520%;animation-delay:0.23s}#brandIntro .bi-l5{margin-left:2.092%;width:13.072%;aspect-ratio:0.8000;background-size:765.00% 100%;background-position-x:60.752%;animation-delay:0.27s}#brandIntro .bi-l6{margin-left:0.915%;width:8.366%;aspect-ratio:0.5120;background-size:1195.31% 100%;background-position-x:72.896%;animation-delay:0.32s}#brandIntro .bi-l7{margin-left:0.523%;width:9.150%;aspect-ratio:0.5600;background-size:1092.86% 100%;background-position-x:83.309%;animation-delay:0.36s}#brandIntro .bi-l8{margin-left:0.915%;width:3.137%;aspect-ratio:0.1920;background-size:3187.50% 100%;background-position-x:88.529%;animation-delay:0.41s}#brandIntro .bi-l9{margin-left:1.046%;width:10.065%;aspect-ratio:0.6160;background-size:993.51% 100%;background-position-x:100.000%;animation-delay:0.45s}",
+  };
+  var LETTERS = { autobahn: 9, huper: 10 };
+
+  var centerHTML = "";
+  if (kind === "letters") {
+    var spans = "";
+    for (var i = 0; i < (LETTERS[brandId] || 9); i++) spans += '<span class="bi-l bi-l' + i + '"></span>';
+    centerHTML =
+      '<div class="bi-word" style="background:none">' + spans +
+      '<div class="bi-glint" style="-webkit-mask-image:url(\'' + cfg.logo + '\');mask-image:url(\'' + cfg.logo + '\')"><span></span></div></div>';
+  } else if (kind === "strike") {
+    centerHTML =
+      '<div class="bi-markwrap"><div class="bi-strike"></div>' +
+      '<div class="bi-mark" style="background-image:url(\'' + cfg.logo + '\')"></div>' +
+      '<div class="bi-glint" style="-webkit-mask-image:url(\'' + cfg.logo + '\');mask-image:url(\'' + cfg.logo + '\')"><span></span></div></div>';
+  }
 
   var el = document.createElement("div");
   el.id = "brandIntro";
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
   el.innerHTML =
+    (cfg.heat ? '<div class="bi-heat"></div><div class="bi-filmline"></div>' : "") +
     '<div class="bi-inner">' +
     (cfg.roadVector ? ROAD_SVG : "") +
-    '  <div class="bi-word" style="background:none"><span class="bi-l bi-l0"></span><span class="bi-l bi-l1"></span><span class="bi-l bi-l2"></span><span class="bi-l bi-l3"></span><span class="bi-l bi-l4"></span><span class="bi-l bi-l5"></span><span class="bi-l bi-l6"></span><span class="bi-l bi-l7"></span><span class="bi-l bi-l8"></span>' +
-    '    <div class="bi-glint" style="-webkit-mask-image:url(\'' + cfg.logo + '\');mask-image:url(\'' + cfg.logo + '\')"><span></span></div>' +
-    "  </div>" +
-    '  <div class="bi-line"></div>' +
+    centerHTML +
+    (cfg.rule === false ? "" : '  <div class="bi-line"></div>') +
     (cfg.sub ? '  <div class="bi-sub">' + cfg.sub + "</div>" : "") +
     "</div>" +
     '<div class="bi-skip">Click to skip</div>';
@@ -42,35 +71,55 @@
     "#brandIntro .bi-inner{position:relative;width:min(72vw,520px);text-align:center;" +
     (reduced ? "" : "animation:biRise .9s cubic-bezier(.2,.7,.2,1) both") + "}" +
     "#brandIntro.bi-out .bi-inner{transform:scale(1.04);transition:transform .45s ease}" +
+    // autobahn: road lanes drawing along their spines
     "#brandIntro .bi-road{position:relative;width:86%;margin:0 auto 10px;aspect-ratio:1200/348}" +
     "#brandIntro .bi-lane{position:absolute;inset:0;width:100%;height:100%;will-change:transform,opacity}" +
     (reduced ? "#brandIntro .bi-spine{animation:none!important;stroke-dashoffset:0!important}" : "#brandIntro .bi-spine{animation:biDraw .6s cubic-bezier(.3,.9,.25,1) forwards}#brandIntro .bi-spine0{animation-delay:.6s}#brandIntro .bi-spine1{animation-delay:.74s}#brandIntro .bi-spine2{animation-delay:.88s}") +
+    // shared: letter type-in
     "#brandIntro .bi-word{position:relative;display:flex;align-items:flex-start;width:100%}" +
     "#brandIntro .bi-l{display:block;background-image:url('" + cfg.logo + "');background-repeat:no-repeat;" +
     (reduced ? "" : "opacity:0;transform:translateY(.35em);will-change:transform,opacity;animation:biLetter .38s cubic-bezier(.2,.7,.2,1) forwards;") + "}" +
-    (reduced ? "" : "#brandIntro .bi-l0{margin-left:2.917%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:3.256%;animation-delay:0.05s}#brandIntro .bi-l1{margin-left:1.833%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:16.914%;animation-delay:0.10s}#brandIntro .bi-l2{margin-left:1.333%;width:6.583%;aspect-ratio:0.3798;background-size:1518.99% 100%;background-position-x:28.724%;animation-delay:0.14s}#brandIntro .bi-l3{margin-left:1.333%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:38.791%;animation-delay:0.18s}#brandIntro .bi-l4{margin-left:1.583%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:52.186%;animation-delay:0.23s}#brandIntro .bi-l5{margin-left:1.083%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:64.963%;animation-delay:0.27s}#brandIntro .bi-l6{margin-left:1.667%;width:10.333%;aspect-ratio:0.5962;background-size:967.74% 100%;background-position-x:78.346%;animation-delay:0.32s}#brandIntro .bi-l7{margin-left:1.333%;width:10.417%;aspect-ratio:0.6010;background-size:960.00% 100%;background-position-x:91.442%;animation-delay:0.36s}#brandIntro .bi-l8{margin-left:1.333%;width:3.333%;aspect-ratio:0.1923;background-size:3000.00% 100%;background-position-x:96.897%;animation-delay:0.41s}") +
+    (reduced || kind !== "letters" ? "" : SLICES[brandId] || "") +
+    // huper: warm wash cools as the film line sweeps down the field
+    "#brandIntro .bi-heat{position:absolute;inset:0;pointer-events:none;" +
+    "background:linear-gradient(165deg,rgba(255,158,64,.32),rgba(255,118,38,.12) 55%,rgba(255,158,64,.04));" +
+    (reduced ? "opacity:0" : "animation:biHeat 1.2s ease .5s forwards") + "}" +
+    "#brandIntro .bi-filmline{position:absolute;left:10%;right:10%;top:16%;height:2px;border-radius:1px;" +
+    "background:linear-gradient(90deg,transparent,#3a3a3e 12%,#3a3a3e 88%,transparent);opacity:0;will-change:transform,opacity;" +
+    (reduced ? "display:none" : "animation:biFilm 1.25s cubic-bezier(.45,0,.25,1) .45s forwards") + "}" +
+    // edge: the signature strike-line draws, the mark blooms around it
+    "#brandIntro .bi-markwrap{position:relative;width:88%;margin:0 auto;aspect-ratio:600/296}" +
+    "#brandIntro .bi-mark{position:absolute;inset:0;background-size:contain;background-position:center;background-repeat:no-repeat;" +
+    (reduced ? "" : "opacity:0;transform:translateY(14px) scale(.965);will-change:transform,opacity;animation:biMark .6s cubic-bezier(.2,.7,.2,1) .58s forwards") + "}" +
+    "#brandIntro .bi-strike{position:absolute;left:-3%;right:-3%;top:53%;height:2.2%;min-height:2px;border-radius:2px;" +
+    "background:" + (cfg.accent || "#0d1b3d") + ";transform-origin:left center;" +
+    (reduced ? "" : "transform:scaleX(0);animation:biLine .55s cubic-bezier(.65,0,.35,1) .16s forwards") + "}" +
+    // shared: glint, rule, sub, skip
     "#brandIntro .bi-glint{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%;overflow:hidden;" +
     (reduced ? "opacity:0;" : "") + "}" +
     "#brandIntro .bi-glint span{position:absolute;top:0;bottom:0;width:34%;" +
     "background:linear-gradient(115deg,transparent,rgba(255,255,255,.85) 50%,transparent);" +
-    "transform:translateX(-160%);will-change:transform;" +
+    "transform:translateX(-160%);opacity:0;will-change:transform;" + // opacity-gated: invisible until the sweep actually runs
     (reduced ? "display:none" : "animation:biGlint .8s ease-in-out 1.7s forwards") + "}" +
     "#brandIntro .bi-line{height:3px;background:" + (cfg.accent || "#a91e22") + ";margin:18px auto 0;width:100%;" +
     "border-radius:2px;transform-origin:left center;" +
-    (reduced ? "" : "transform:scaleX(0);animation:biLine .6s cubic-bezier(.65,0,.35,1) .5s forwards") + "}" +
-    "#brandIntro .bi-sub{margin-top:16px;color:#fff;opacity:0;font-family:" + (cfg.font || "sans-serif") + ";" +
+    (reduced ? "" : "transform:scaleX(0);animation:biLine .6s cubic-bezier(.65,0,.35,1) " + (cfg.lineDelay || 0.5) + "s forwards") + "}" +
+    "#brandIntro .bi-sub{margin-top:16px;color:" + fg + ";opacity:0;font-family:" + (cfg.font || "sans-serif") + ";" +
     "font-size:clamp(12px,1.6vw,15px);font-weight:600;letter-spacing:.55em;text-indent:.55em;" +
     (reduced ? "opacity:.85" : "animation:biSub .6s ease 1.45s forwards") + "}" +
     "#brandIntro .bi-skip{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);" +
-    "color:rgba(255,255,255,.35);font-size:11px;letter-spacing:.14em;text-transform:uppercase;" +
+    "color:" + dim + ";font-size:11px;letter-spacing:.14em;text-transform:uppercase;" +
     "font-family:" + (cfg.font || "sans-serif") + ";opacity:0;animation:biSkip .4s ease 1.6s forwards}" +
     "@keyframes biDraw{to{stroke-dashoffset:0}}" +
     "@keyframes biLetter{to{opacity:1;transform:translateY(0)}}" +
     "@keyframes biLine{to{transform:scaleX(1)}}" +
+    "@keyframes biMark{to{opacity:1;transform:translateY(0) scale(1)}}" +
+    "@keyframes biHeat{to{opacity:0}}" +
+    "@keyframes biFilm{0%{opacity:0;transform:translateY(0)}12%{opacity:.9}88%{opacity:.9}100%{opacity:0;transform:translateY(60vh)}}" +
     "@keyframes biSub{to{opacity:.85}}" +
     "@keyframes biSkip{to{opacity:1}}" +
     "@keyframes biRise{from{transform:translateY(10px)}to{transform:translateY(0)}}" +
-    "@keyframes biGlint{from{transform:translateX(-160%)}to{transform:translateX(460%)}}";
+    "@keyframes biGlint{from{opacity:1;transform:translateX(-160%)}to{opacity:1;transform:translateX(460%)}}";
 
   document.head.appendChild(css);
   document.documentElement.appendChild(el);
