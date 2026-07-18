@@ -50,6 +50,14 @@
   document.getElementById("ctaTagline").textContent = BRAND.ctaTagline || "";
   document.getElementById("dealerBtn").href = BRAND.dealerUrl || "#";
   document.getElementById("dealerBtn").textContent = BRAND.dealerCta || "Find an Installer";
+  // lead enrichment: carry the shopper's vehicle (from the savings card) on the
+  // dealer link so downstream pages/forms can pick it up
+  function updateDealerLink() {
+    const base = BRAND.dealerUrl || "#";
+    const v = S.sv && S.sv.vehicle;
+    document.getElementById("dealerBtn").href =
+      v ? base + (base.includes("?") ? "&" : "?") + "vehicle=" + encodeURIComponent(v) : base;
+  }
 
   // ---------- state ----------
   const S = {
@@ -255,6 +263,7 @@
     const fleet = fleet3D();
     if (fleet.length && !fleet.some((f) => f.id === S.vehicle)) S.vehicle = fleet[0].id;
     renderStageTools();
+    renderSavings(); // body style follows the staged vehicle until manually chosen
     window.VIEWER3D.setPaint(S.paint);
     const cr = document.getElementById("modelCredit");
     if (cr) {
@@ -638,10 +647,32 @@
     return series().shades.find((s) => s.vlt === vlt) || series().shades[0];
   }
 
+  // the 3D fleet's staged vehicle seeds the calculator's body style
+  function stagedBodyStyle() {
+    const id = (S.vehicle || "").toLowerCase();
+    if (id.includes("truck")) return "truck";
+    if (id.includes("suv")) return "suv";
+    return "sedan";
+  }
+
   function setupSavings() {
     if (!BRAND.savings || !window.SAVINGS || !$("savingsCard")) return;
     $("savingsCard").hidden = false;
-    S.sv = { on: false, mode: "gas", miles: 13500, price: null }; // price null = mode default
+    S.sv = { on: false, mode: "gas", body: stagedBodyStyle(), miles: 13500, price: null }; // price null = mode default
+    const bodySeg = $("svBody2");
+    bodySeg.innerHTML = Object.entries(window.SAVINGS.BODY).map(([id, b]) =>
+      `<button data-b="${id}" class="${id === S.sv.body ? "on" : ""}">${b.label}</button>`).join("");
+    bodySeg.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        S.sv.body = b.dataset.b;
+        S.sv.bodyTouched = true; // user's explicit choice wins over the staged vehicle
+        bodySeg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+        renderSavings();
+      }));
+    $("svVehicle").addEventListener("input", () => {
+      S.sv.vehicle = $("svVehicle").value.trim();
+      updateDealerLink();
+    });
     $("svToggle").addEventListener("click", () => {
       S.sv.on = !S.sv.on;
       $("svToggle").setAttribute("aria-checked", String(S.sv.on));
@@ -667,8 +698,16 @@
     if (!BRAND.savings || !window.SAVINGS || !S.sv || !S.sv.on) return;
     if (S.space !== "vehicles") return;
     const sh = activeShadeSpec();
+    // follow the staged vehicle until the user picks a body style themselves
+    if (!S.sv.bodyTouched) {
+      const auto = stagedBodyStyle();
+      if (auto !== S.sv.body) {
+        S.sv.body = auto;
+        $("svBody2").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.b === auto));
+      }
+    }
     const r = window.SAVINGS.compute({
-      tser: sh.tser, mode: S.sv.mode, miles: S.sv.miles,
+      tser: sh.tser, mode: S.sv.mode, body: S.sv.body, miles: S.sv.miles,
       price: S.sv.price, usState: S.usState || null,
     });
     $("svResults").innerHTML = r.tiles.map(([v, l]) =>

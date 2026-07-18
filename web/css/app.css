@@ -263,6 +263,9 @@ main > * { min-width: 0; } /* canvas intrinsic size must not blow out the grid c
   border: 1.5px solid var(--line, #ddd); border-radius: var(--chip-radius, 8px);
   background: var(--panel-bg, #fff); color: var(--panel-text, #333);
 }
+.sv-veh { margin: 2px 0 12px; }
+.sv-veh input { width: 100%; box-sizing: border-box; }
+.sv-veh .sv-opt { text-transform: none; letter-spacing: 0; }
 .sv-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .sv-results .spec .val { font-size: 17px; }
 .sv-note { font-size: 10.5px; color: var(--muted, #999); margin-top: 10px; line-height: 1.5; }

@@ -44,6 +44,21 @@
     // EPA: 8,887 g CO2 per gallon of gasoline.
     CO2_LB_PER_GAL: 19.6,
     MILES_BASE: 13500, // FHWA average annual miles
+    // Filmable glazing splits front sides vs rear surfaces (back sides + backlight).
+    // Rear carries more area on most bodies. PROVISIONAL.
+    FRONT_SHARE: 0.45,
+    // Factory deep-dyed "privacy" glass baseline on rear surfaces where fitted
+    // (most trucks/SUVs/vans) — film adds less on glass that's already dark. PROVISIONAL.
+    PRIVACY_GLASS_TSER: 0.5,
+  };
+
+  // Body-style factors: relative filmable glazing area (sedan = 1.0) and
+  // whether rear surfaces typically ship with factory privacy glass. PROVISIONAL.
+  var BODY = {
+    sedan: { glaze: 1.0,  privacy: false, label: "Sedan / Coupe" },
+    suv:   { glaze: 1.35, privacy: true,  label: "SUV" },
+    truck: { glaze: 1.1,  privacy: true,  label: "Truck" },
+    van:   { glaze: 1.5,  privacy: true,  label: "Minivan" },
   };
 
   // Climate tiers scale A/C energy with cooling demand. State groupings by
@@ -70,20 +85,28 @@
     DEFAULT_GAS_PRICE: 3.10,
     DEFAULT_KWH_PRICE: 0.17,
 
+    BODY: BODY,
+
     compute: function (o) {
       var tierKey = (o.usState && STATE_TIER[o.usState]) || null;
       var tier = tierKey ? TIER[tierKey] : 1.0;
       var milesScale = (o.miles || C.MILES_BASE) / C.MILES_BASE;
-      var g = C.FACTORY_GLASS_TSER;
+      var body = BODY[o.body] || BODY.sedan;
       var tser = Math.max(0, Math.min(1, (o.tser || 0) / 100));
-      var dR = Math.max(0, tser - g) / (1 - g); // incremental rejection vs factory glass
+      // incremental rejection per surface group: rear surfaces of most
+      // trucks/SUVs already carry dark factory privacy glass, so film adds
+      // less there than on the clear front doors
+      var inc = function (g) { return Math.max(0, tser - g) / (1 - g); };
+      var dFront = inc(C.FACTORY_GLASS_TSER);
+      var dRear = inc(body.privacy ? C.PRIVACY_GLASS_TSER : C.FACTORY_GLASS_TSER);
+      var dR = C.FRONT_SHARE * dFront + (1 - C.FRONT_SHARE) * dRear;
 
       var solarCut = Math.round(dR * 100); // honest headline: heat through filmed glass cut by this
       var ev = o.mode === "ev";
       var price = o.price || (ev ? this.DEFAULT_KWH_PRICE : this.DEFAULT_GAS_PRICE);
 
       var tiles, note;
-      var chain = C.SOLAR_SHARE * C.FILMED_SHARE * dR * tier * milesScale;
+      var chain = C.SOLAR_SHARE * C.FILMED_SHARE * dR * tier * milesScale * body.glaze;
       if (ev) {
         var kwh = C.AC_KWH_BASE * chain;
         tiles = [
@@ -104,8 +127,10 @@
           ? "Climate-adjusted for your selected state (" + tierKey + " tier)."
           : "U.S.-average climate — pick your state above for a local estimate.") +
         " Modeled on U.S. DOE / NREL vehicle air-conditioning research: sun through the glass drives A/C load, and this film rejects " +
-        solarCut + "% of the solar energy your factory glass lets through on tinted surfaces. Windshield excluded. " +
-        "Estimates are directional — actual savings vary with parking, usage, and vehicle. The comfort difference (cooler cabin, faster cool-down, less rolled-down driving) comes free either way.";
+        solarCut + "% of the solar energy your factory glass lets through on tinted surfaces" +
+        (body.privacy ? " (factory privacy glass on the rear already rejects some — we only credit the film for the difference)" : "") +
+        ". Windshield excluded. Estimates are directional — actual savings vary with parking, usage, and vehicle. " +
+        "The comfort difference (cooler cabin, faster cool-down, less rolled-down driving) comes free either way.";
       return { tiles: tiles, note: note, solarCut: solarCut };
     },
   };

@@ -6,7 +6,7 @@
   <title>Window Tint Visualizer</title>
   <!-- rel=33: bump this query on every release — browsers heuristically cache these
        without revalidating, and a mixed old/new set breaks the page silently -->
-  <link rel="stylesheet" href="css/app.css?rel=37">
+  <link rel="stylesheet" href="css/app.css?rel=38">
 </head>
 <body>
   <header>
@@ -74,6 +74,7 @@
             <div class="sv-seg" id="svMode" role="group" aria-label="Powertrain">
               <button data-m="gas" class="on">Gas</button><button data-m="hybrid">Hybrid</button><button data-m="ev">EV</button>
             </div>
+            <div class="sv-seg" id="svBody2" role="group" aria-label="Body style"></div>
             <label class="sv-field">Miles / year
               <input id="svMiles" type="number" min="1000" max="60000" step="500" value="13500" inputmode="numeric">
             </label>
@@ -81,6 +82,9 @@
               <input id="svPrice" type="number" min="1" max="9" step="0.05" value="3.10" inputmode="decimal">
             </label>
           </div>
+          <label class="sv-field sv-veh">Your vehicle <span class="sv-opt">(optional — helps your dealer quote)</span>
+            <input id="svVehicle" type="text" maxlength="60" placeholder="e.g. 2022 Chevrolet Tahoe" autocomplete="off">
+          </label>
           <div class="sv-results" id="svResults"></div>
           <div class="sv-note" id="svNote"></div>
         </div>
@@ -98,14 +102,14 @@
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
   </script>
-  <script type="module" src="js/viewer3d.js?rel=37"></script>
-  <script src="js/vehicles.js?rel=37"></script>
-  <script src="js/photocars.js?rel=37"></script>
-  <script src="js/tintlaws.js?rel=37"></script>
-  <script src="js/buildings.js?rel=37"></script>
-  <script src="js/brands.js?rel=37"></script>
-  <script src="js/intro.js?rel=37"></script>
-  <script src="js/savings.js?rel=37"></script>
-  <script src="js/app.js?rel=37"></script>
+  <script type="module" src="js/viewer3d.js?rel=38"></script>
+  <script src="js/vehicles.js?rel=38"></script>
+  <script src="js/photocars.js?rel=38"></script>
+  <script src="js/tintlaws.js?rel=38"></script>
+  <script src="js/buildings.js?rel=38"></script>
+  <script src="js/brands.js?rel=38"></script>
+  <script src="js/intro.js?rel=38"></script>
+  <script src="js/savings.js?rel=38"></script>
+  <script src="js/app.js?rel=38"></script>
 </body>
 </html>
