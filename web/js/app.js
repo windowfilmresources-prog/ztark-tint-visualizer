@@ -363,6 +363,7 @@
     }
     const lawCard = $("lawSelect") && $("lawSelect").closest(".card");
     if (lawCard) lawCard.style.display = auto ? "" : "none";
+    if ($("savingsCard")) $("savingsCard").style.display = auto && BRAND.savings ? "" : "none";
     const sub = $("heroSub");
     if (sub) sub.textContent = auto ? (BRAND.hero.sub || "") : (BCAT.heroSub || BRAND.hero.sub || "");
     const pt = $("pageTitle");
@@ -628,6 +629,51 @@
     $("specs").innerHTML = cells.map(([v, l]) =>
       `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
     $("specsNote").textContent = series().warranty || "";
+    renderSavings();
+  }
+
+  // ---------- fuel & energy savings ----------
+  function activeShadeSpec() {
+    const vlt = activeShadeVlt();
+    return series().shades.find((s) => s.vlt === vlt) || series().shades[0];
+  }
+
+  function setupSavings() {
+    if (!BRAND.savings || !window.SAVINGS || !$("savingsCard")) return;
+    $("savingsCard").hidden = false;
+    S.sv = { on: false, mode: "gas", miles: 13500, price: null }; // price null = mode default
+    $("svToggle").addEventListener("click", () => {
+      S.sv.on = !S.sv.on;
+      $("svToggle").setAttribute("aria-checked", String(S.sv.on));
+      $("svBody").hidden = !S.sv.on;
+      renderSavings();
+    });
+    $("svMode").querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        S.sv.mode = b.dataset.m;
+        S.sv.price = null; // fall back to the new mode's default price
+        $("svMode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+        const ev = S.sv.mode === "ev";
+        $("svPriceField").firstChild.textContent = ev ? "Electricity $ / kWh" : "Fuel $ / gal";
+        $("svPrice").value = ev ? window.SAVINGS.DEFAULT_KWH_PRICE : window.SAVINGS.DEFAULT_GAS_PRICE;
+        $("svPrice").step = ev ? "0.01" : "0.05";
+        renderSavings();
+      }));
+    $("svMiles").addEventListener("input", () => { S.sv.miles = +$("svMiles").value || 13500; renderSavings(); });
+    $("svPrice").addEventListener("input", () => { S.sv.price = +$("svPrice").value || null; renderSavings(); });
+  }
+
+  function renderSavings() {
+    if (!BRAND.savings || !window.SAVINGS || !S.sv || !S.sv.on) return;
+    if (S.space !== "vehicles") return;
+    const sh = activeShadeSpec();
+    const r = window.SAVINGS.compute({
+      tser: sh.tser, mode: S.sv.mode, miles: S.sv.miles,
+      price: S.sv.price, usState: S.usState || null,
+    });
+    $("svResults").innerHTML = r.tiles.map(([v, l]) =>
+      `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
+    $("svNote").innerHTML = r.note;
   }
 
   // ---------- tint law ----------
@@ -636,7 +682,7 @@
       .sort((a, b) => a[1].name.localeCompare(b[1].name))
       .map(([code, s]) => `<option value="${code}">${s.name}</option>`).join("");
     $("lawSelect").innerHTML = `<option value="">Select your state…</option>` + opts;
-    $("lawSelect").addEventListener("change", () => { S.usState = $("lawSelect").value; renderLaw(); });
+    $("lawSelect").addEventListener("change", () => { S.usState = $("lawSelect").value; renderLaw(); renderSavings(); });
   }
 
   function windshieldRow(st) {
@@ -701,6 +747,7 @@
   renderSeries();
   renderZoneBar();
   renderShades();
+  setupSavings();
   renderSpecs();
   renderLawSelect();
   renderLaw();

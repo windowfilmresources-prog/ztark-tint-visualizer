@@ -1,0 +1,112 @@
+// Fuel & energy savings estimator for automotive window film.
+//
+// Model chain: solar radiation through glazing -> cabin heat load -> A/C load
+// -> fuel (or battery). Film is modeled on SIDE + REAR glass only (windshield
+// film is excluded, matching law and the visualizer's zones).
+//
+//   savings = AC_energy(climate, miles)          annual A/C fuel or kWh
+//           x SOLAR_SHARE                        A/C load caused by sun through glass
+//           x FILMED_SHARE                       portion of that on filmable surfaces
+//           x dR                                 incremental rejection of the film
+//   dR = (TSER_film - TSER_factory_glass) / (1 - TSER_factory_glass)
+//
+// TSER spec values already include the glass the film is measured on, so the
+// factory-glass baseline keeps us honest: film only saves what the factory
+// glass wasn't already rejecting.
+//
+// Constants are intentionally conservative; each carries its basis. The
+// PROVISIONAL tags are being tightened against primary sources (NREL/LBNL/SAE)
+// — structure will not change, values may move slightly.
+(function () {
+  var C = {
+    // National-average annual A/C fuel for a conventional gas car. Basis:
+    // NREL (Rugh et al.) estimated ~5.5% of U.S. light-duty fuel goes to A/C
+    // (~7 billion gal/yr) => ~30 gal per vehicle-year. PROVISIONAL.
+    AC_GALLONS_BASE: 30,
+    // EV annual climate-control-for-cooling energy, national average. Basis:
+    // fleet telematics (Geotab/Recurrent) show cooling is a smaller range hit
+    // than heating; ~4-6% of ~3,800 kWh/yr consumption in warm use. PROVISIONAL.
+    AC_KWH_BASE: 260,
+    // Hybrids: electric compressor + efficient engine burn less fuel for the
+    // same cooling. PROVISIONAL.
+    HYBRID_FACTOR: 0.65,
+    // Share of A/C load attributable to solar gain through GLAZING (vs body
+    // conduction, ambient, occupants). Basis: NREL solar-load/soak studies —
+    // glazing is the dominant solar path into the cabin. PROVISIONAL.
+    SOLAR_SHARE: 0.5,
+    // Share of glazing solar gain arriving through FILMABLE surfaces (sides +
+    // rear; windshield excluded — it is the single largest solar aperture).
+    // Basis: glazing area breakdowns weighted for orientation. PROVISIONAL.
+    FILMED_SHARE: 0.5,
+    // TSER of typical factory automotive glass (green-tinted tempered sides).
+    // Clear glass ~25%; factory green ~35-40%. PROVISIONAL.
+    FACTORY_GLASS_TSER: 0.37,
+    // EPA: 8,887 g CO2 per gallon of gasoline.
+    CO2_LB_PER_GAL: 19.6,
+    MILES_BASE: 13500, // FHWA average annual miles
+  };
+
+  // Climate tiers scale A/C energy with cooling demand. State groupings by
+  // cooling-degree-day bands. PROVISIONAL multipliers.
+  var TIER = {
+    hot: 1.6, warm: 1.15, moderate: 0.85, cool: 0.55,
+  };
+  var STATE_TIER = {
+    AZ: "hot", NV: "hot", TX: "hot", FL: "hot", LA: "hot", MS: "hot", AL: "hot",
+    GA: "hot", SC: "hot", OK: "hot", AR: "hot", HI: "hot", NM: "hot",
+    CA: "warm", NC: "warm", TN: "warm", KY: "warm", VA: "warm", MO: "warm",
+    KS: "warm", MD: "warm", DE: "warm", DC: "warm", NJ: "warm", IL: "warm", IN: "warm",
+    OH: "moderate", PA: "moderate", NY: "moderate", CT: "moderate", RI: "moderate",
+    MA: "moderate", IA: "moderate", NE: "moderate", UT: "moderate", CO: "moderate", WV: "moderate",
+    WA: "cool", OR: "cool", ID: "cool", MT: "cool", WY: "cool", ND: "cool", SD: "cool",
+    MN: "cool", WI: "cool", MI: "cool", VT: "cool", NH: "cool", ME: "cool", AK: "cool",
+  };
+
+  function fmtMoney(x) {
+    return "$" + (x >= 100 ? Math.round(x) : x.toFixed(x >= 10 ? 0 : 2));
+  }
+
+  window.SAVINGS = {
+    DEFAULT_GAS_PRICE: 3.10,
+    DEFAULT_KWH_PRICE: 0.17,
+
+    compute: function (o) {
+      var tierKey = (o.usState && STATE_TIER[o.usState]) || null;
+      var tier = tierKey ? TIER[tierKey] : 1.0;
+      var milesScale = (o.miles || C.MILES_BASE) / C.MILES_BASE;
+      var g = C.FACTORY_GLASS_TSER;
+      var tser = Math.max(0, Math.min(1, (o.tser || 0) / 100));
+      var dR = Math.max(0, tser - g) / (1 - g); // incremental rejection vs factory glass
+
+      var solarCut = Math.round(dR * 100); // honest headline: heat through filmed glass cut by this
+      var ev = o.mode === "ev";
+      var price = o.price || (ev ? this.DEFAULT_KWH_PRICE : this.DEFAULT_GAS_PRICE);
+
+      var tiles, note;
+      var chain = C.SOLAR_SHARE * C.FILMED_SHARE * dR * tier * milesScale;
+      if (ev) {
+        var kwh = C.AC_KWH_BASE * chain;
+        tiles = [
+          [fmtMoney(kwh * price) + "/yr", "Est. energy savings"],
+          [Math.round(kwh) + " kWh/yr", "Less battery drain"],
+          ["−" + solarCut + "%", "Solar heat via tinted glass"],
+        ];
+      } else {
+        var gal = C.AC_GALLONS_BASE * chain * (o.mode === "hybrid" ? C.HYBRID_FACTOR : 1);
+        tiles = [
+          [fmtMoney(gal * price) + "/yr", "Est. fuel savings"],
+          [gal.toFixed(1) + " gal/yr", "Less fuel burned"],
+          ["−" + solarCut + "%", "Solar heat via tinted glass"],
+        ];
+      }
+      note =
+        (tierKey
+          ? "Climate-adjusted for your selected state (" + tierKey + " tier)."
+          : "U.S.-average climate — pick your state above for a local estimate.") +
+        " Modeled on U.S. DOE / NREL vehicle air-conditioning research: sun through the glass drives A/C load, and this film rejects " +
+        solarCut + "% of the solar energy your factory glass lets through on tinted surfaces. Windshield excluded. " +
+        "Estimates are directional — actual savings vary with parking, usage, and vehicle. The comfort difference (cooler cabin, faster cool-down, less rolled-down driving) comes free either way.";
+      return { tiles: tiles, note: note, solarCut: solarCut };
+    },
+  };
+})();

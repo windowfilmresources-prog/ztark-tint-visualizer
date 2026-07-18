@@ -235,6 +235,39 @@ main > * { min-width: 0; } /* canvas intrinsic size must not blow out the grid c
 .spec .lbl { font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted, #999); margin-top: 3px; }
 .specs-note { font-size: 11px; color: var(--muted, #999); margin-top: 10px; }
 
+/* fuel & energy savings */
+.sv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sv-head h2 { margin: 0; }
+.sv-switch {
+  flex: 0 0 auto; width: 44px; height: 24px; border-radius: 999px; border: 1.5px solid var(--line, #ddd);
+  background: var(--panel-bg, #fff); cursor: pointer; position: relative; padding: 0; transition: background .2s, border-color .2s;
+}
+.sv-switch .sv-knob {
+  position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--muted, #999); transition: transform .2s, background .2s;
+}
+.sv-switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.sv-switch[aria-checked="true"] .sv-knob { transform: translateX(20px); background: var(--accent-text, #fff); }
+#svBody { margin-top: 12px; }
+.sv-inputs { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
+.sv-seg { display: flex; border: 1.5px solid var(--line, #ddd); border-radius: var(--chip-radius, 8px); overflow: hidden; }
+.sv-seg button {
+  padding: 7px 12px; font-family: var(--body-font); font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: var(--panel-bg, #fff); color: var(--panel-text, #333); border: 0; border-right: 1px solid var(--line, #ddd);
+}
+.sv-seg button:last-child { border-right: 0; }
+.sv-seg button.on { background: var(--accent); color: var(--accent-text, #fff); }
+.sv-field { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted, #999); }
+.sv-field input {
+  width: 96px; padding: 7px 9px; font-family: var(--body-font); font-size: 13.5px;
+  border: 1.5px solid var(--line, #ddd); border-radius: var(--chip-radius, 8px);
+  background: var(--panel-bg, #fff); color: var(--panel-text, #333);
+}
+.sv-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sv-results .spec .val { font-size: 17px; }
+.sv-note { font-size: 10.5px; color: var(--muted, #999); margin-top: 10px; line-height: 1.5; }
+.sv-note .sv-how { color: inherit; text-decoration: underline; cursor: pointer; background: none; border: 0; font: inherit; padding: 0; }
+
 /* law */
 .law-select {
   width: 100%; padding: 10px 12px; font-family: var(--body-font); font-size: 14px;

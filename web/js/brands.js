@@ -104,6 +104,7 @@ window.BRANDS = {
     defaultPaint: "#1a1c1f",
     plate: { bg: "#0c0c0d", fg: "#ffffff", border: "#a91e22", logo: "assets/plate-autobahn.png", text: "AUTOBAHN", sub: "NO LIMITS", font: "'Orbitron',sans-serif" },
     intro: { kind: "letters", logo: "assets/plate-autobahn.png", roadVector: true, sub: "NO LIMITS", bg: "#0a0a0b", accent: "#a91e22", font: "'Orbitron',sans-serif" },
+    savings: true, // fuel & energy savings estimator card
     defaultShade: { seriesIdx: 1, vlt: 15, sku: 15 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
     dealerUrl: "https://autobahnwindowfilms.com/dealer-locator/", dealerCta: "Find a Dealer Near You",
