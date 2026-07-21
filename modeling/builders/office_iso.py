@@ -686,9 +686,7 @@ def landscape(M):
         group="lawn")
     box("Lawn_FR", M["lawn"], 0.3, 9.3, 4.0, 7.5, z, z + 0.018, group="lawn")
     box("Lawn_R", M["lawn"], 6.6, 9.4, -6.8, 3.4, z, z + 0.018, group="lawn")
-    grass_tufts(M, "Turf_FL", -9.3, -3.1, 4.0, 7.6, z + 0.018, seed=21)
-    grass_tufts(M, "Turf_FR", 0.3, 9.3, 4.0, 7.5, z + 0.018, seed=22)
-    grass_tufts(M, "Turf_R", 6.6, 9.4, -6.8, 3.4, z + 0.018, seed=23)
+    # (blade tufts retired — the viewer shades the lawns procedurally now)
     # hedges along the base
     hg = M["foliage"]
     box("Hedge_FL", hg, BX0 + 0.3, EX0 - 0.45, 3.32, 3.78, z, z + 0.52,

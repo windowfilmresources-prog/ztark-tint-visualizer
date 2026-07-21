@@ -180,7 +180,87 @@ function splitGlass(mesh, frame) {
 // ---------------------------------------------------------------- building preparation
 // Architectural dioramas: locked isometric ortho camera + a furnished-interior
 // view. All Glass_* meshes share one physical material driven by setBuildingFilm.
+// ---------------------------------------------------------------- organic shaders
+// Procedural grass / foliage / bark detail, injected into the standard
+// material via onBeforeCompile — no texture assets, world-space noise so no
+// UV dependence, and it inherits all scene lighting (sun, film dimming).
+const ORGANIC_NOISE_GLSL = `
+varying vec3 vOrganicWP;
+float zh21(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+float zh31(vec3 p){ p = fract(p * vec3(127.1, 311.7, 74.7)); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
+float zvn2(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(zh21(i), zh21(i + vec2(1.0, 0.0)), f.x),
+             mix(zh21(i + vec2(0.0, 1.0)), zh21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float zvn3(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float c00 = mix(zh31(i), zh31(i + vec3(1.0, 0.0, 0.0)), f.x);
+  float c10 = mix(zh31(i + vec3(0.0, 1.0, 0.0)), zh31(i + vec3(1.0, 1.0, 0.0)), f.x);
+  float c01 = mix(zh31(i + vec3(0.0, 0.0, 1.0)), zh31(i + vec3(1.0, 0.0, 1.0)), f.x);
+  float c11 = mix(zh31(i + vec3(0.0, 1.0, 1.0)), zh31(i + vec3(1.0, 1.0, 1.0)), f.x);
+  return mix(mix(c00, c10, f.y), mix(c01, c11, f.y), f.z);
+}
+`;
+const ORGANIC_FRAG = {
+  lawn: `
+    float zpatch = zvn2(vOrganicWP.xz * 2.4) + 0.5 * zvn2(vOrganicWP.xz * 5.1);
+    vec3 zdry = diffuseColor.rgb * vec3(1.30, 1.18, 0.62);
+    diffuseColor.rgb = mix(diffuseColor.rgb, zdry, smoothstep(0.55, 1.15, zpatch) * 0.55);
+    float zblade = zh21(floor(vOrganicWP.xz * 140.0));
+    float zrow = zvn2(vOrganicWP.xz * vec2(34.0, 9.0));
+    diffuseColor.rgb *= (0.80 + 0.34 * zblade) * (0.92 + 0.16 * zrow);
+  `,
+  foliage: `
+    float zclump = zvn3(vOrganicWP * 7.0) + 0.5 * zvn3(vOrganicWP * 16.0);
+    diffuseColor.rgb *= 0.68 + 0.45 * zclump;
+    float zleaf = zh31(floor(vOrganicWP * 55.0));
+    diffuseColor.rgb *= 0.90 + 0.20 * zleaf;
+    diffuseColor.g *= 1.0 + 0.10 * (zclump - 0.75);
+  `,
+  bark: `
+    float zgrain = zvn2(vec2(vOrganicWP.x * 14.0 + vOrganicWP.z * 14.0, vOrganicWP.y * 2.2));
+    diffuseColor.rgb *= 0.78 + 0.4 * zgrain;
+  `,
+};
+
+function patchOrganicMaterial(mat, kind) {
+  if (!mat || mat.userData.organicKind === kind) return;
+  mat.userData.organicKind = kind;
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vOrganicWP;")
+      .replace("#include <worldpos_vertex>",
+        "#include <worldpos_vertex>\nvOrganicWP = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\n" + ORGANIC_NOISE_GLSL)
+      .replace("#include <color_fragment>", "#include <color_fragment>\n" + ORGANIC_FRAG[kind]);
+  };
+  mat.customProgramCacheKey = () => "organic_" + kind;
+  mat.needsUpdate = true;
+}
+
+const ORGANIC_MATS = [
+  [/^Lawn$/i, "lawn"],
+  [/^Grass_Blade/i, "lawn"],
+  [/^Foliage/i, "foliage"],
+  [/^Trunk$/i, "bark"],
+];
+
+function patchBuildingOrganics(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (!m || !m.name) return;
+      for (const [re, kind] of ORGANIC_MATS) {
+        if (re.test(m.name)) { patchOrganicMaterial(m, kind); break; }
+      }
+    });
+  });
+}
+
 function prepareBuilding(root) {
+  patchBuildingOrganics(root);
   const glassMeshes = [];
   const glass = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0.0, roughness: 0.06, transmission: 1.0,

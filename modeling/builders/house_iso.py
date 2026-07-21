@@ -227,12 +227,7 @@ def build_site(m):
         _bo = bpy.context.active_object
         _bo.name = "Bloom%d" % bi
         _finish(_bo, bm_, 0.0, True)
-    grass_tufts("Turf_Front", -9.9, 9.9, -7.7, -2.7, Z0 + 0.03, seed=11,
-                avoid=((-6.4, -0.6, -6.75, -3.65),    # pool + coping
-                       (-6.4, -0.6, -7.55, -6.5),     # deck
-                       (0.0, 2.3, -6.6, -3.4)))       # loungers/umbrella pad
-    grass_tufts("Turf_Left", -9.9, -8.7, -2.7, 7.0, Z0 + 0.03, seed=12)
-    grass_tufts("Turf_Right", 7.7, 9.9, -2.7, 6.8, Z0 + 0.03, seed=13)
+    # (blade tufts retired — the viewer shades the lawns procedurally now)
 
     # pool: concrete rim (basin) + glossy water inside + oak deck strip
     B("Pool_RimN", -6.25, -0.75, -4.05, -3.80, 0.02, 0.16, m["concrete"], bevel=0.04, smooth=True)
