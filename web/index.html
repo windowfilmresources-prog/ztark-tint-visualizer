@@ -6,7 +6,7 @@
   <title>Window Tint Visualizer</title>
   <!-- rel=33: bump this query on every release — browsers heuristically cache these
        without revalidating, and a mixed old/new set breaks the page silently -->
-  <link rel="stylesheet" href="css/app.css?rel=38">
+  <link rel="stylesheet" href="css/app.css?rel=39">
 </head>
 <body>
   <header>
@@ -90,6 +90,31 @@
         </div>
       </div>
 
+      <div class="card" id="bsCard" hidden>
+        <div class="sv-head">
+          <h2>Cooling Cost Savings</h2>
+          <button id="bsToggle" class="sv-switch" role="switch" aria-checked="false" aria-label="Show cooling cost savings estimate"><span class="sv-knob"></span></button>
+        </div>
+        <div id="bsBody" hidden>
+          <div class="sv-inputs">
+            <label class="sv-field">ZIP code
+              <input id="bsZip" type="text" inputmode="numeric" maxlength="5" placeholder="77002" autocomplete="postal-code">
+            </label>
+            <label class="sv-field">State
+              <select class="law-select" id="bsState"></select>
+            </label>
+            <label class="sv-field">Glass area (sq ft)
+              <input id="bsSqft" type="number" min="20" max="50000" step="10" inputmode="numeric">
+            </label>
+            <label class="sv-field">Installed $ / sq ft
+              <input id="bsCost" type="number" min="3" max="30" step="0.5" inputmode="decimal">
+            </label>
+          </div>
+          <div class="sv-results" id="bsResults"></div>
+          <div class="sv-note" id="bsNote"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="cta-tagline" id="ctaTagline"></div>
         <a class="cta-btn" id="dealerBtn" href="#" target="_top">Find a Dealer</a>
@@ -102,14 +127,15 @@
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
   </script>
-  <script type="module" src="js/viewer3d.js?rel=38"></script>
-  <script src="js/vehicles.js?rel=38"></script>
-  <script src="js/photocars.js?rel=38"></script>
-  <script src="js/tintlaws.js?rel=38"></script>
-  <script src="js/buildings.js?rel=38"></script>
-  <script src="js/brands.js?rel=38"></script>
-  <script src="js/intro.js?rel=38"></script>
-  <script src="js/savings.js?rel=38"></script>
-  <script src="js/app.js?rel=38"></script>
+  <script type="module" src="js/viewer3d.js?rel=39"></script>
+  <script src="js/vehicles.js?rel=39"></script>
+  <script src="js/photocars.js?rel=39"></script>
+  <script src="js/tintlaws.js?rel=39"></script>
+  <script src="js/buildings.js?rel=39"></script>
+  <script src="js/bsavings.js?rel=39"></script>
+  <script src="js/brands.js?rel=39"></script>
+  <script src="js/intro.js?rel=39"></script>
+  <script src="js/savings.js?rel=39"></script>
+  <script src="js/app.js?rel=39"></script>
 </body>
 </html>

@@ -173,6 +173,7 @@
   function updateBuildingFilm() {
     if (window.VIEWER3D) window.VIEWER3D.setBuildingFilm(S.comparing ? null : bFilm());
     renderBadge();
+    renderBSavings();
   }
 
   function renderVehicle() {
@@ -373,6 +374,8 @@
     const lawCard = $("lawSelect") && $("lawSelect").closest(".card");
     if (lawCard) lawCard.style.display = auto ? "" : "none";
     if ($("savingsCard")) $("savingsCard").style.display = auto && BRAND.savings ? "" : "none";
+    if ($("bsCard")) $("bsCard").style.display = !auto && BCAT ? "" : "none";
+    syncBsInputs();
     const sub = $("heroSub");
     if (sub) sub.textContent = auto ? (BRAND.hero.sub || "") : (BCAT.heroSub || BRAND.hero.sub || "");
     const pt = $("pageTitle");
@@ -715,6 +718,66 @@
     $("svNote").innerHTML = r.note;
   }
 
+  // ---------- cooling cost savings (buildings) ----------
+  function setupBSavings() {
+    if (!window.BSAVINGS || !BCAT || !$("bsCard")) return;
+    $("bsCard").hidden = false;
+    $("bsCard").style.display = "none"; // vehicles space at boot; enterSpace reveals
+    S.bs = { on: false, zip: "", usState: null, sqft: {}, cost: {} };
+    const sel = $("bsState");
+    sel.innerHTML = `<option value="">Select your state…</option>` +
+      Object.entries(window.BSAVINGS.STATES)
+        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+        .map(([code, s]) => `<option value="${code}">${s.name}</option>`).join("");
+    $("bsToggle").addEventListener("click", () => {
+      S.bs.on = !S.bs.on;
+      $("bsToggle").setAttribute("aria-checked", String(S.bs.on));
+      $("bsBody").hidden = !S.bs.on;
+      renderBSavings();
+    });
+    $("bsZip").addEventListener("input", () => {
+      S.bs.zip = $("bsZip").value;
+      const st = window.BSAVINGS.zipToState(S.bs.zip);
+      if (st) { S.bs.usState = st; sel.value = st; }
+      renderBSavings();
+    });
+    sel.addEventListener("change", () => { S.bs.usState = sel.value || null; renderBSavings(); });
+    $("bsSqft").addEventListener("input", () => { S.bs.sqft[S.space] = +$("bsSqft").value || null; renderBSavings(); });
+    $("bsCost").addEventListener("input", () => { S.bs.cost[S.space] = +$("bsCost").value || null; renderBSavings(); });
+    syncBsInputs();
+  }
+
+  // reflect the current space's defaults into the inputs (user edits win)
+  function syncBsInputs() {
+    if (!S.bs || !$("bsSqft") || S.space === "vehicles") return;
+    const d = window.BSAVINGS.defaults(S.space);
+    $("bsSqft").value = S.bs.sqft[S.space] ?? d.sqft;
+    $("bsCost").value = S.bs.cost[S.space] ?? d.cost;
+    renderBSavings();
+  }
+
+  function renderBSavings() {
+    if (!S.bs || !S.bs.on || S.space === "vehicles" || !window.BSAVINGS) return;
+    const sh = bShade();
+    if (!sh) {
+      $("bsResults").innerHTML =
+        `<div class="sv-note">Pick a film shade above to see what it saves.</div>`;
+      $("bsNote").innerHTML = "";
+      return;
+    }
+    const d = window.BSAVINGS.defaults(S.space);
+    const r = window.BSAVINGS.compute({
+      sqft: S.bs.sqft[S.space] ?? d.sqft,
+      tser: sh.tser,
+      usState: S.bs.usState,
+      commercial: S.space === "commercial",
+      costPerSqft: S.bs.cost[S.space] ?? d.cost,
+    });
+    $("bsResults").innerHTML = r.tiles.map(([v, l]) =>
+      `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
+    $("bsNote").innerHTML = r.note;
+  }
+
   // ---------- tint law ----------
   function renderLawSelect() {
     const opts = Object.entries(window.TINT_LAWS.states)
@@ -787,6 +850,14 @@
   renderZoneBar();
   renderShades();
   setupSavings();
+  setupBSavings();
+
+  // ?space=residential|commercial deep-links the architectural viewer
+  // (e.g. the retired dealers.z-tark.com/home/ redirects here)
+  const spaceParam = (qs.get("space") || "").toLowerCase();
+  if (BCAT && MODE_3D && (spaceParam === "residential" || spaceParam === "commercial")) {
+    enterSpace(spaceParam);
+  }
   renderSpecs();
   renderLawSelect();
   renderLaw();
