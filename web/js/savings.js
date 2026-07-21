@@ -19,27 +19,38 @@
 // — structure will not change, values may move slightly.
 (function () {
   var C = {
-    // National-average annual A/C fuel for a conventional gas car. Basis:
-    // NREL (Rugh et al.) estimated ~5.5% of U.S. light-duty fuel goes to A/C
-    // (~7 billion gal/yr) => ~30 gal per vehicle-year. PROVISIONAL.
+    // National-average annual A/C fuel for a conventional gas car. VERIFIED:
+    // NREL (Rugh et al. 2018, SAE 06-12-01-0002 / NREL CP-5400-69047): U.S.
+    // light-duty A/C fuel = 7.59B gal/yr = 6.1% of LD fuel = 30.0 gal per
+    // vehicle-year (11,346 mi/yr avg). docs.nrel.gov/docs/fy18osti/69047.pdf
     AC_GALLONS_BASE: 30,
-    // EV annual climate-control-for-cooling energy, national average. Basis:
-    // fleet telematics (Geotab/Recurrent) show cooling is a smaller range hit
-    // than heating; ~4-6% of ~3,800 kWh/yr consumption in warm use. PROVISIONAL.
-    AC_KWH_BASE: 260,
+    // EV annual cooling energy. Recurrent 2023 telematics (~5% range loss at
+    // 90F; ~1 kW steady / 3-5 kW pulldown) + Geotab 2025: cooling = 4-7% of
+    // ~3,800 kWh/yr => 150-280 kWh band; 220 = midpoint (260 was the hot-
+    // climate top of the band — the TIER multiplier handles hot states).
+    // STILL PROVISIONAL (no published annual cooling-only figure exists).
+    AC_KWH_BASE: 220,
     // Hybrids: electric compressor + efficient engine burn less fuel for the
-    // same cooling. PROVISIONAL.
+    // same cooling. Engineering ratio (thermal load served at ~35% avg engine
+    // efficiency + no idle-drag compressor vs ~25% incl. idle) = 0.6-0.7 band;
+    // direction confirmed by fueleconomy.gov/feg/hotweather + ANL SAE
+    // 2013-01-1462. STILL PROVISIONAL.
     HYBRID_FACTOR: 0.65,
-    // Share of A/C load attributable to solar gain through GLAZING (vs body
-    // conduction, ambient, occupants). Basis: NREL solar-load/soak studies —
-    // glazing is the dominant solar path into the cabin. PROVISIONAL.
-    SOLAR_SHARE: 0.5,
+    // Share of ANNUAL A/C energy attributable to solar gain through GLAZING.
+    // Derived from Rugh 2018 Table 5: solar-control glass cutting transmitted
+    // solar ~25% on ALL glazing saves 8.7% of annual A/C fuel => glazing solar
+    // ~= 0.087/0.25 ~= 0.35 of A/C load. (NREL 1999 co-heating test CP-540-
+    // 26615 shows ~48% of parked-SOAK gain is glazing, but drive-time A/C adds
+    // ambient/ventilation/pull-down load, diluting the solar share. The old
+    // 0.5 overstated savings ~40%.)
+    SOLAR_SHARE: 0.35,
     // Share of glazing solar gain arriving through FILMABLE surfaces (sides +
     // rear; windshield excluded — it is the single largest solar aperture).
     // Basis: glazing area breakdowns weighted for orientation. PROVISIONAL.
     FILMED_SHARE: 0.5,
-    // TSER of typical factory automotive glass (green-tinted tempered sides).
-    // Clear glass ~25%; factory green ~35-40%. PROVISIONAL.
+    // TSER of typical factory automotive glass. Rugh 2018 baseline production
+    // side glazing Tds=45.1% (ISO 13837) => SHGC ~0.60, TSER ~0.38-0.42;
+    // 0.37 is the conservative edge. VERIFIED-CONSERVATIVE.
     FACTORY_GLASS_TSER: 0.37,
     // EPA: 8,887 g CO2 per gallon of gasoline.
     CO2_LB_PER_GAL: 19.6,
@@ -48,8 +59,10 @@
     // Rear carries more area on most bodies. PROVISIONAL.
     FRONT_SHARE: 0.45,
     // Factory deep-dyed "privacy" glass baseline on rear surfaces where fitted
-    // (most trucks/SUVs/vans) — film adds less on glass that's already dark. PROVISIONAL.
-    PRIVACY_GLASS_TSER: 0.5,
+    // (most trucks/SUVs/vans). Rugh 2018 measured privacy glass Tds ~16.6% =>
+    // TSER ~0.6 — film adds little on glass that dark, and we only credit the
+    // difference.
+    PRIVACY_GLASS_TSER: 0.6,
   };
 
   // Body-style factors: relative filmable glazing area (sedan = 1.0) and

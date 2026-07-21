@@ -6,9 +6,10 @@
 // user can override.
 //
 //   L (kBTU/sqft-yr) = 32 + 0.023 x CDD      solar heat through clear vertical
-//                                            glass over the cooling season,
-//                                            calibrated so Phoenix ~ 122,
-//                                            Houston ~ 99, NYC ~ 50. PROVISIONAL.
+//                                            glass over the cooling season; with
+//                                            the sourced CDD table this gives
+//                                            AZ ~102, TX ~96, FL ~115, NY ~46.
+//                                            Coefficient itself PROVISIONAL.
 //   kWh saved = sqft x L x TSER / SEER       SEER = BTU per Wh, so kBTU/SEER = kWh
 //   $ saved   = kWh x rate                   regional residential rate (EIA)
 //   payback   = (sqft x $/sqft) / $ saved
@@ -17,35 +18,41 @@
 // glass, so no factory-glass adjustment is needed (unlike automotive, the
 // baseline here IS clear glass).
 (function () {
-  // state -> { name, cdd (annual base-65 cooling degree days, population-
-  // weighted approx from NOAA normals), rate ($/kWh residential, EIA approx) }
+  // state -> { name, cdd, rate } — SOURCED (was PROVISIONAL):
+  //   cdd: EIA State Energy Data System "Energy Indicators" series ZWCDP —
+  //        population-weighted NOAA cooling degree days (base 65F), averaged
+  //        1991-2020 to match NOAA normals, rounded to 50. AK true value ~16,
+  //        floored to 50. Cross-checked against NOAA CPC weighted dailies.
+  //        eia.gov/state/seds/sep_indicators/energy_indicators.csv
+  //   rate: EIA Electric Power Monthly Table 5.6.A, residential, April 2026
+  //        (released 6/2026). eia.gov/electricity/monthly (epmt_5_6_a)
   var STATES = {
-    AL: { name: "Alabama", cdd: 2000, rate: 0.15 },      AK: { name: "Alaska", cdd: 50, rate: 0.24 },
-    AZ: { name: "Arizona", cdd: 3900, rate: 0.14 },      AR: { name: "Arkansas", cdd: 1900, rate: 0.13 },
-    CA: { name: "California", cdd: 1100, rate: 0.30 },   CO: { name: "Colorado", cdd: 800, rate: 0.15 },
-    CT: { name: "Connecticut", cdd: 750, rate: 0.28 },   DE: { name: "Delaware", cdd: 1200, rate: 0.16 },
-    DC: { name: "Washington DC", cdd: 1600, rate: 0.17 },FL: { name: "Florida", cdd: 3500, rate: 0.15 },
-    GA: { name: "Georgia", cdd: 2000, rate: 0.14 },      HI: { name: "Hawaii", cdd: 3300, rate: 0.42 },
-    ID: { name: "Idaho", cdd: 750, rate: 0.11 },         IL: { name: "Illinois", cdd: 1100, rate: 0.15 },
-    IN: { name: "Indiana", cdd: 1100, rate: 0.15 },      IA: { name: "Iowa", cdd: 1000, rate: 0.13 },
-    KS: { name: "Kansas", cdd: 1600, rate: 0.14 },       KY: { name: "Kentucky", cdd: 1400, rate: 0.13 },
-    LA: { name: "Louisiana", cdd: 2800, rate: 0.12 },    ME: { name: "Maine", cdd: 350, rate: 0.24 },
-    MD: { name: "Maryland", cdd: 1300, rate: 0.17 },     MA: { name: "Massachusetts", cdd: 650, rate: 0.30 },
-    MI: { name: "Michigan", cdd: 700, rate: 0.19 },      MN: { name: "Minnesota", cdd: 700, rate: 0.15 },
-    MS: { name: "Mississippi", cdd: 2300, rate: 0.13 },  MO: { name: "Missouri", cdd: 1500, rate: 0.12 },
-    MT: { name: "Montana", cdd: 450, rate: 0.12 },       NE: { name: "Nebraska", cdd: 1200, rate: 0.11 },
-    NV: { name: "Nevada", cdd: 2900, rate: 0.14 },       NH: { name: "New Hampshire", cdd: 500, rate: 0.24 },
-    NJ: { name: "New Jersey", cdd: 1100, rate: 0.18 },   NM: { name: "New Mexico", cdd: 1500, rate: 0.14 },
-    NY: { name: "New York", cdd: 800, rate: 0.23 },      NC: { name: "North Carolina", cdd: 1600, rate: 0.13 },
-    ND: { name: "North Dakota", cdd: 550, rate: 0.11 },  OH: { name: "Ohio", cdd: 1000, rate: 0.15 },
-    OK: { name: "Oklahoma", cdd: 2100, rate: 0.12 },     OR: { name: "Oregon", cdd: 450, rate: 0.12 },
-    PA: { name: "Pennsylvania", cdd: 1000, rate: 0.17 }, RI: { name: "Rhode Island", cdd: 700, rate: 0.28 },
-    SC: { name: "South Carolina", cdd: 2100, rate: 0.14 },SD: { name: "South Dakota", cdd: 800, rate: 0.12 },
-    TN: { name: "Tennessee", cdd: 1700, rate: 0.12 },    TX: { name: "Texas", cdd: 2900, rate: 0.15 },
-    UT: { name: "Utah", cdd: 1100, rate: 0.11 },         VT: { name: "Vermont", cdd: 400, rate: 0.21 },
-    VA: { name: "Virginia", cdd: 1500, rate: 0.14 },     WA: { name: "Washington", cdd: 350, rate: 0.11 },
-    WV: { name: "West Virginia", cdd: 1000, rate: 0.14 },WI: { name: "Wisconsin", cdd: 700, rate: 0.17 },
-    WY: { name: "Wyoming", cdd: 500, rate: 0.12 },
+    AL: { name: "Alabama", cdd: 1950, rate: 0.174 },      AK: { name: "Alaska", cdd: 50, rate: 0.274 },
+    AZ: { name: "Arizona", cdd: 3050, rate: 0.155 },      AR: { name: "Arkansas", cdd: 1750, rate: 0.142 },
+    CA: { name: "California", cdd: 950, rate: 0.353 },   CO: { name: "Colorado", cdd: 350, rate: 0.165 },
+    CT: { name: "Connecticut", cdd: 600, rate: 0.322 },   DE: { name: "Delaware", cdd: 1150, rate: 0.188 },
+    DC: { name: "Washington DC", cdd: 1700, rate: 0.254 },FL: { name: "Florida", cdd: 3600, rate: 0.154 },
+    GA: { name: "Georgia", cdd: 1750, rate: 0.154 },      HI: { name: "Hawaii", cdd: 4650, rate: 0.466 },
+    ID: { name: "Idaho", cdd: 500, rate: 0.127 },         IL: { name: "Illinois", cdd: 900, rate: 0.205 },
+    IN: { name: "Indiana", cdd: 900, rate: 0.179 },      IA: { name: "Iowa", cdd: 800, rate: 0.139 },
+    KS: { name: "Kansas", cdd: 1450, rate: 0.158 },       KY: { name: "Kentucky", cdd: 1250, rate: 0.150 },
+    LA: { name: "Louisiana", cdd: 2700, rate: 0.144 },    ME: { name: "Maine", cdd: 250, rate: 0.284 },
+    MD: { name: "Maryland", cdd: 1150, rate: 0.221 },     MA: { name: "Massachusetts", cdd: 500, rate: 0.295 },
+    MI: { name: "Michigan", cdd: 600, rate: 0.214 },      MN: { name: "Minnesota", cdd: 450, rate: 0.164 },
+    MS: { name: "Mississippi", cdd: 2200, rate: 0.168 },  MO: { name: "Missouri", cdd: 1250, rate: 0.140 },
+    MT: { name: "Montana", cdd: 200, rate: 0.139 },       NE: { name: "Nebraska", cdd: 1000, rate: 0.133 },
+    NV: { name: "Nevada", cdd: 2150, rate: 0.143 },       NH: { name: "New Hampshire", cdd: 300, rate: 0.272 },
+    NJ: { name: "New Jersey", cdd: 850, rate: 0.235 },   NM: { name: "New Mexico", cdd: 1000, rate: 0.152 },
+    NY: { name: "New York", cdd: 600, rate: 0.295 },      NC: { name: "North Carolina", cdd: 1450, rate: 0.163 },
+    ND: { name: "North Dakota", cdd: 450, rate: 0.124 },  OH: { name: "Ohio", cdd: 800, rate: 0.195 },
+    OK: { name: "Oklahoma", cdd: 1900, rate: 0.133 },     OR: { name: "Oregon", cdd: 250, rate: 0.158 },
+    PA: { name: "Pennsylvania", cdd: 700, rate: 0.215 }, RI: { name: "Rhode Island", cdd: 550, rate: 0.283 },
+    SC: { name: "South Carolina", cdd: 1950, rate: 0.171 },SD: { name: "South Dakota", cdd: 700, rate: 0.145 },
+    TN: { name: "Tennessee", cdd: 1400, rate: 0.149 },    TX: { name: "Texas", cdd: 2800, rate: 0.170 },
+    UT: { name: "Utah", cdd: 550, rate: 0.133 },         VT: { name: "Vermont", cdd: 200, rate: 0.246 },
+    VA: { name: "Virginia", cdd: 1150, rate: 0.174 },     WA: { name: "Washington", cdd: 200, rate: 0.144 },
+    WV: { name: "West Virginia", cdd: 800, rate: 0.161 },WI: { name: "Wisconsin", cdd: 500, rate: 0.192 },
+    WY: { name: "Wyoming", cdd: 300, rate: 0.147 },
   };
 
   // ZIP prefix (first 3 digits) -> state, as [lo, hi, state] ranges
@@ -71,9 +78,10 @@
     // Commercial spaces cool longer occupied hours with higher internal gains,
     // so a sqft of glass removes more annual AC energy than in a home; packaged
     // rooftop units also run less efficient than home splits. Net factor on
-    // energy, and commercial power is cheaper than residential. PROVISIONAL.
+    // energy PROVISIONAL; the rate ratio is EIA-sourced (US avg 4/2026:
+    // commercial 13.51 c/kWh vs residential 18.83 = 0.72).
     COMMERCIAL_LOAD: 1.3,
-    COMMERCIAL_RATE: 0.8,
+    COMMERCIAL_RATE: 0.72,
     // Typical installed film price bands ($/sqft) — dealer-quotable defaults.
     COST_RES: 9,
     COST_COM: 7,
@@ -110,7 +118,7 @@
     compute: function (o) {
       var s = STATES[o.usState] || { name: null, cdd: 1500, rate: 0.15 };
       var com = !!o.commercial;
-      var seer = o.seer || (s.cdd >= 1800 ? C.SEER_HOT : C.SEER_COOL);
+      var seer = o.seer || (s.cdd >= 1400 ? C.SEER_HOT : C.SEER_COOL);
       var rate = o.rate || s.rate * (com ? C.COMMERCIAL_RATE : 1);
       var tser = Math.max(0, Math.min(1, (o.tser || 0) / 100));
       var sqft = Math.max(0, o.sqft || 0);

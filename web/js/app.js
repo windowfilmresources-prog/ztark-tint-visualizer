@@ -12,6 +12,20 @@
   const brandId = (qs.get("brand") || "huper").toLowerCase();
   const BRAND = window.BRANDS[brandId] || window.BRANDS.huper;
 
+  // engagement beacons → the locators /track collector (same origin in prod).
+  // Fire-and-forget: staging/static hosts have no collector and that's fine.
+  const TRACK_OK = !/onrender\.com|localhost|127\.0\.0\.1/.test(location.hostname);
+  function track(type, detail, market) {
+    if (!TRACK_OK || !navigator.sendBeacon) return;
+    try {
+      navigator.sendBeacon("/track", JSON.stringify({
+        type, brand: brandId,
+        detail: (detail || "").slice(0, 120) || undefined,
+        market: market || undefined,
+      }));
+    } catch { /* never let analytics break the app */ }
+  }
+
   const ZONES = ["windshield", "front", "rear", "back"];
   const ZONE_LABELS = {
     windshield: "Windshield",
@@ -360,6 +374,7 @@
   function enterSpace(space) {
     if (S.space === space) return;
     S.space = space;
+    track("viz_space", space);
     const auto = space === "vehicles";
     // cards that only make sense for vehicles
     // the shade chips live in the same card as the zone bar — hide only the
@@ -547,6 +562,7 @@
         } else {
           const sel = { vlt: +b.dataset.vlt, sku: +b.dataset.sku, seriesIdx: S.series };
           activeZones().forEach((z) => { S.shades[z] = { ...sel }; });
+          track("viz_shade", `vehicles: ${series().name} ${sel.sku}`, S.usState);
         }
         renderShades(); renderSpecs(); applyTint();
       }));
@@ -572,6 +588,7 @@
     $("shadeChips").querySelectorAll(".shade-chip").forEach((btn) =>
       btn.addEventListener("click", () => {
         b.shade = btn.dataset.factory ? null : { ...bSeries().shades[+btn.dataset.i], seriesIdx: b.series };
+        if (b.shade) track("viz_shade", `${S.space}: ${bSeries().name} ${b.shade.sku}`, S.bs && S.bs.usState);
         renderBuildingShades(); renderSpecs(); updateBuildingFilm();
       }));
     refocus();
@@ -678,6 +695,7 @@
     });
     $("svToggle").addEventListener("click", () => {
       S.sv.on = !S.sv.on;
+      if (S.sv.on) track("viz_savings", "vehicles", S.usState);
       $("svToggle").setAttribute("aria-checked", String(S.sv.on));
       $("svBody").hidden = !S.sv.on;
       renderSavings();
@@ -731,6 +749,7 @@
         .map(([code, s]) => `<option value="${code}">${s.name}</option>`).join("");
     $("bsToggle").addEventListener("click", () => {
       S.bs.on = !S.bs.on;
+      if (S.bs.on) track("viz_savings", S.space, S.bs.usState);
       $("bsToggle").setAttribute("aria-checked", String(S.bs.on));
       $("bsBody").hidden = !S.bs.on;
       renderBSavings();
@@ -741,7 +760,11 @@
       if (st) { S.bs.usState = st; sel.value = st; }
       renderBSavings();
     });
-    sel.addEventListener("change", () => { S.bs.usState = sel.value || null; renderBSavings(); });
+    sel.addEventListener("change", () => {
+      S.bs.usState = sel.value || null;
+      if (S.bs.usState) track("viz_savings", S.space + " state", S.bs.usState);
+      renderBSavings();
+    });
     $("bsSqft").addEventListener("input", () => { S.bs.sqft[S.space] = +$("bsSqft").value || null; renderBSavings(); });
     $("bsCost").addEventListener("input", () => { S.bs.cost[S.space] = +$("bsCost").value || null; renderBSavings(); });
     syncBsInputs();
@@ -851,6 +874,9 @@
   renderShades();
   setupSavings();
   setupBSavings();
+  track("viz_view", brandId + (qs.get("space") ? " " + qs.get("space") : ""));
+  document.getElementById("dealerBtn").addEventListener("click", () =>
+    track("viz_dealer_click", S.space, (S.bs && S.bs.usState) || S.usState));
 
   // ?space=residential|commercial deep-links the architectural viewer
   // (e.g. the retired dealers.z-tark.com/home/ redirects here)
