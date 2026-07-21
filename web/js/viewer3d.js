@@ -1202,14 +1202,20 @@ function resize() {
 function interiorDaylight() {
   if (state.buildingView !== "interior" || !state.buildingPrep) return;
   const film = state.buildingFilm;
-  const s = film ? tintScalar(film.vlt) : 1.0;
+  // interior daylight tracks the film's ACTUAL transmission (VLT), not the
+  // softened visual curve — a 20% film passes 20% of the light, and the room
+  // should show it. Small floors keep a 5% film from blacking out the scene.
+  const v = film ? Math.max(0, Math.min(1, film.vlt / 100)) : 1.0;
   if (state.keyLight) {
-    state.keyLight.intensity = 3.0 * (0.12 + 0.88 * s);
+    state.keyLight.intensity = 3.0 * (0.05 + 0.95 * v);
     // warm films warm the sunlight they pass
     state.keyLight.color.setHex(film && film.tone === "warm" ? 0xffe6c4 : 0xfff4e8);
   }
-  if (state.buildingHemi) state.buildingHemi.intensity = 0.38 * (0.45 + 0.55 * s);
-  if (state.interiorFill) state.interiorFill.intensity = 2 * (0.6 + 0.4 * s);
+  if (state.buildingHemi) state.buildingHemi.intensity = 0.38 * (0.3 + 0.7 * v);
+  if (state.interiorFill) state.interiorFill.intensity = 2 * (0.45 + 0.55 * v);
+  // the env map is a big constant light source — it must dim too or it keeps
+  // the room bright no matter what film is on the glass
+  setBuildingEnvIntensity(0.45 * (0.3 + 0.7 * v));
 }
 
 function applyBuildingFilm(film) {
