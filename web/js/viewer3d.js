@@ -204,6 +204,7 @@ float zvn3(vec3 p){
 `;
 const ORGANIC_FRAG = {
   lawn: `
+    diffuseColor.rgb *= vec3(1.35, 1.42, 1.05);   // bright stylized ground under the blades
     float zpatch = zvn2(vOrganicWP.xz * 2.4) + 0.5 * zvn2(vOrganicWP.xz * 5.1);
     vec3 zdry = diffuseColor.rgb * vec3(1.30, 1.18, 0.62);
     diffuseColor.rgb = mix(diffuseColor.rgb, zdry, smoothstep(0.55, 1.15, zpatch) * 0.55);
@@ -212,6 +213,7 @@ const ORGANIC_FRAG = {
     diffuseColor.rgb *= (0.80 + 0.34 * zblade) * (0.92 + 0.16 * zrow);
   `,
   foliage: `
+    diffuseColor.rgb *= vec3(1.18, 1.30, 1.02);   // vivid friendly canopy
     float zclump = zvn3(vOrganicWP * 7.0) + 0.5 * zvn3(vOrganicWP * 16.0);
     diffuseColor.rgb *= 0.68 + 0.45 * zclump;
     float zleaf = zh31(floor(vOrganicWP * 55.0));
@@ -293,7 +295,7 @@ function makeBladeGeometry() {
 function grassMaterial() {
   if (!state.grassTime) state.grassTime = { value: 0 };
   const m = new THREE.MeshStandardMaterial({
-    color: 0x3a5c14, roughness: 0.85, side: THREE.DoubleSide, name: "Grass_Instanced",
+    color: 0x63a226, roughness: 0.85, side: THREE.DoubleSide, name: "Grass_Instanced",
   });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uGrassTime = state.grassTime;
@@ -314,7 +316,7 @@ function grassMaterial() {
         varying float vBladeH;
         varying float vBladeTint;`)
       .replace("#include <color_fragment>", `#include <color_fragment>
-        diffuseColor.rgb *= 0.62 + 0.48 * vBladeH;               // dark roots, lit tips
+        diffuseColor.rgb *= 0.74 + 0.36 * vBladeH;               // soft roots, lit tips
         diffuseColor.rgb *= 0.82 + 0.36 * vBladeTint;            // per-blade variation
         diffuseColor.g *= 1.0 + 0.14 * (vBladeTint - 0.5);       // subtle hue drift
         diffuseColor.rgb = mix(diffuseColor.rgb,
@@ -469,6 +471,7 @@ function applyBuildingView(view) {
     state.scene.add(state.buildingHemi);
   }
   state.buildingHemi.visible = true;
+  if (state.renderer) state.renderer.toneMappingExposure = 1.12; // bright stylized look
   // soft interior fill: warms the room without the specular blowout a strong
   // near-camera point light causes
   if (!state.interiorFill) {
@@ -478,7 +481,7 @@ function applyBuildingView(view) {
   }
   if (view === "interior" && state.buildingPrep.camNode) {
     // enough ambient that shadows stay soft, low enough that they exist
-    state.buildingHemi.intensity = 0.38;
+    state.buildingHemi.intensity = 0.46;
     state.scene.background = buildingSky();
     const cam = state.persCam;
     cam.fov = 58;
@@ -516,7 +519,7 @@ function applyBuildingView(view) {
     state.interiorFill.visible = true;
     interiorDaylight(); // the selected film scales the rig from these baselines
   } else {
-    state.buildingHemi.intensity = 0.45;
+    state.buildingHemi.intensity = 0.62;
     state.scene.background = new THREE.Color(0xf2f3f5);
     if (state.keyLight) {
       state.keyLight.intensity = 1.35;
@@ -548,6 +551,7 @@ function applyBuildingView(view) {
 }
 
 function restoreCarCamera() {
+  if (state.renderer) state.renderer.toneMappingExposure = 1.0;
   if (state.interiorFill) state.interiorFill.visible = false;
   if (state.buildingHemi) state.buildingHemi.visible = false;
   if (state.scene) state.scene.background = new THREE.Color(0xf2f3f5);
@@ -1415,7 +1419,7 @@ function interiorDaylight() {
     // warm films warm the sunlight they pass
     state.keyLight.color.setHex(film && film.tone === "warm" ? 0xffe6c4 : 0xfff4e8);
   }
-  if (state.buildingHemi) state.buildingHemi.intensity = 0.38 * (0.3 + 0.7 * v);
+  if (state.buildingHemi) state.buildingHemi.intensity = 0.46 * (0.3 + 0.7 * v);
   if (state.interiorFill) state.interiorFill.intensity = 2 * (0.45 + 0.55 * v);
   // the env map is a big constant light source — it must dim too or it keeps
   // the room bright no matter what film is on the glass
