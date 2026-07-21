@@ -195,7 +195,8 @@ function prepareBuilding(root) {
       glassMeshes.push(o);
     } else {
       o.castShadow = true;
-    }
+      o.receiveShadow = true;  // building self-shadowing: sunlight raking a
+    }                          // room/facade is what makes it read as real
   });
   // fit the diorama into the studio (shadow rig covers ~±4.5m)
   const box = new THREE.Box3().setFromObject(root);
@@ -238,6 +239,19 @@ function buildingSky() {
   return state.buildingSkyTex;
 }
 
+// dial the studio env map's contribution on all building materials — full
+// strength outside (diorama sparkle), dimmed inside so the sun reads
+function setBuildingEnvIntensity(v) {
+  if (!state.carRoot) return;
+  state.carRoot.traverse((o) => {
+    if (o.isMesh && o.material && o.material.envMapIntensity != null &&
+        o.material !== (state.buildingPrep && state.buildingPrep.buildingGlass)) {
+      o.material.envMapIntensity = v;
+      o.material.needsUpdate = false;
+    }
+  });
+}
+
 function applyBuildingView(view) {
   if (!state.buildingPrep || !state.carRoot) return;
   state.buildingView = view;
@@ -260,7 +274,8 @@ function applyBuildingView(view) {
     state.scene.add(state.interiorFill);
   }
   if (view === "interior" && state.buildingPrep.camNode) {
-    state.buildingHemi.intensity = 1.05;
+    // enough ambient that shadows stay soft, low enough that they exist
+    state.buildingHemi.intensity = 0.38;
     state.scene.background = buildingSky();
     const cam = state.persCam;
     cam.fov = 58;
@@ -271,11 +286,39 @@ function applyBuildingView(view) {
     cam.lookAt(tgt);
     cam.updateProjectionMatrix();
     state.camera = cam;
+    // sun: key light outside beyond the glass, high and off-axis, raking INTO
+    // the room so furniture throws real shadows across the floor
+    if (state.keyLight) {
+      const out = tgt.clone().sub(cam.position);
+      out.y = 0;
+      out.normalize();
+      const side = new THREE.Vector3(-out.z, 0, out.x); // lateral offset -> diagonal rake
+      // LOW sun (≈20° elevation): any higher and the roof shadow-caster blocks
+      // it — direct light must slip under the eave through the glass wall
+      state.keyLight.position.copy(tgt)
+        .addScaledVector(out, 5.5)
+        .addScaledVector(side, 2.5)
+        .add(new THREE.Vector3(0, 2.3, 0));
+      state.keyLight.target.position.copy(cam.position).setY(0);
+      state.keyLight.target.updateMatrixWorld();
+      // the room is near-white from env+ambient already: the sun needs real
+      // headroom to read as light, and the flat studio env must yield to it
+      state.keyLight.intensity = 3.0;
+      state.keyLight.shadow.radius = 4;   // crisper sun shadows indoors
+      if (state.renderer) state.renderer.shadowMap.needsUpdate = true;
+    }
+    setBuildingEnvIntensity(0.45);
+    state.interiorFill.intensity = 2;
     state.interiorFill.position.copy(cam.position).add(new THREE.Vector3(0, 0.5, 0));
     state.interiorFill.visible = true;
   } else {
     state.buildingHemi.intensity = 0.45;
     state.scene.background = new THREE.Color(0xf2f3f5);
+    if (state.keyLight) {
+      state.keyLight.intensity = 1.35;
+      state.keyLight.shadow.radius = 9;
+    }
+    setBuildingEnvIntensity(1.0);
     state.interiorFill.visible = false;
     const box = new THREE.Box3().setFromObject(state.carRoot);
     const size = box.getSize(new THREE.Vector3());
@@ -284,7 +327,11 @@ function applyBuildingView(view) {
     const d = state.buildingIsoDir || [1, 0.62, -1];
     const dir = new THREE.Vector3(d[0], d[1], d[2]).normalize();
     // key light fronts the shown facades (cars restore it in restoreCarCamera)
-    if (state.keyLight) state.keyLight.position.set(Math.sign(d[0]) * 5, 7, Math.sign(d[2]) * 4);
+    if (state.keyLight) {
+      state.keyLight.position.set(Math.sign(d[0]) * 5, 7, Math.sign(d[2]) * 4);
+      state.keyLight.target.position.set(0, 0, 0);
+      state.keyLight.target.updateMatrixWorld();
+    }
     if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved
     cam.position.copy(center).addScaledVector(dir, 16);
     cam.lookAt(center.x, center.y * 0.92, center.z);
@@ -301,7 +348,13 @@ function restoreCarCamera() {
   if (state.buildingHemi) state.buildingHemi.visible = false;
   if (state.scene) state.scene.background = new THREE.Color(0xf2f3f5);
   if (state.scene) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
-  if (state.keyLight) state.keyLight.position.set(4.5, 6.5, 3.5);
+  if (state.keyLight) {
+    state.keyLight.intensity = 1.35;
+    state.keyLight.shadow.radius = 9;
+    state.keyLight.position.set(4.5, 6.5, 3.5);
+    state.keyLight.target.position.set(0, 0, 0);
+    state.keyLight.target.updateMatrixWorld();
+  }
   if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved
   const cam = state.persCam;
   cam.fov = 38;
