@@ -311,6 +311,7 @@ function applyBuildingView(view) {
     state.interiorFill.intensity = 2;
     state.interiorFill.position.copy(cam.position).add(new THREE.Vector3(0, 0.5, 0));
     state.interiorFill.visible = true;
+    interiorDaylight(); // the selected film scales the rig from these baselines
   } else {
     state.buildingHemi.intensity = 0.45;
     state.scene.background = new THREE.Color(0xf2f3f5);
@@ -1194,10 +1195,28 @@ function resize() {
 }
 
 // film: {vlt, refl, tone} or null for bare glass
+// The film doesn't just darken the view — it changes the LIGHT IN THE ROOM.
+// Scale the interior daylight rig (sun, sky bounce, fill) by the film's
+// transmission so picking a shade visibly calms the space; hold-to-compare
+// (film=null) snaps back to full sun. Floors keep the scene from dying at 5%.
+function interiorDaylight() {
+  if (state.buildingView !== "interior" || !state.buildingPrep) return;
+  const film = state.buildingFilm;
+  const s = film ? tintScalar(film.vlt) : 1.0;
+  if (state.keyLight) {
+    state.keyLight.intensity = 3.0 * (0.12 + 0.88 * s);
+    // warm films warm the sunlight they pass
+    state.keyLight.color.setHex(film && film.tone === "warm" ? 0xffe6c4 : 0xfff4e8);
+  }
+  if (state.buildingHemi) state.buildingHemi.intensity = 0.38 * (0.45 + 0.55 * s);
+  if (state.interiorFill) state.interiorFill.intensity = 2 * (0.6 + 0.4 * s);
+}
+
 function applyBuildingFilm(film) {
   const prep = state.buildingPrep;
   if (!prep || !prep.buildingGlass) return;
   const m = prep.buildingGlass;
+  interiorDaylight();
   if (!film) {
     m.color.setScalar(1);
     m.envMapIntensity = 1;
