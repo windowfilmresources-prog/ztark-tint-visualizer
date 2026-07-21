@@ -259,6 +259,128 @@ function patchBuildingOrganics(root) {
   });
 }
 
+// ---------------------------------------------------------------- instanced grass
+// Indie-game turf: one curved blade drawn tens of thousands of times via
+// InstancedMesh (single draw call). Per-instance height/rotation/lean/tint,
+// root-to-tip gradient and wind sway in the shader. Standard-material base
+// so it inherits the sun, shadows, and the film's interior dimming.
+const GRASS_DENSITY = 3800;   // blades per world m² of lawn
+const GRASS_MAX = 60000;      // hard cap across all lawns
+
+function makeBladeGeometry() {
+  // tapered 4-segment strip, height 1 (instance scale sets real height),
+  // gentle forward bend so blades read curved, not razor-flat
+  const widths = [1.0, 0.82, 0.55, 0.28, 0.0];
+  const bend = [0, 0.06, 0.18, 0.34, 0.52];
+  const pos = [], norm = [], idx = [];
+  widths.forEach((w, i) => {
+    const y = i / (widths.length - 1);
+    const half = 0.5 * w;
+    pos.push(-half, y, bend[i], half, y, bend[i]);
+    norm.push(0, 0.25, 1, 0, 0.25, 1);
+  });
+  for (let i = 0; i < widths.length - 1; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(norm, 3));
+  g.setIndex(idx);
+  return g;
+}
+
+function grassMaterial() {
+  if (!state.grassTime) state.grassTime = { value: 0 };
+  const m = new THREE.MeshStandardMaterial({
+    color: 0x3a5c14, roughness: 0.85, side: THREE.DoubleSide, name: "Grass_Instanced",
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGrassTime = state.grassTime;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>
+        uniform float uGrassTime;
+        varying float vBladeH;
+        varying float vBladeTint;`)
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        vBladeH = position.y;
+        vec2 iPos = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+        vBladeTint = fract(sin(dot(iPos, vec2(12.9898, 78.233))) * 43758.5453);
+        float sway = sin(uGrassTime * 1.9 + iPos.x * 5.1 + iPos.y * 3.7) * 0.5
+                   + sin(uGrassTime * 3.1 + iPos.y * 8.3) * 0.25;
+        transformed.x += vBladeH * vBladeH * sway * 0.09;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>
+        varying float vBladeH;
+        varying float vBladeTint;`)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+        diffuseColor.rgb *= 0.62 + 0.48 * vBladeH;               // dark roots, lit tips
+        diffuseColor.rgb *= 0.82 + 0.36 * vBladeTint;            // per-blade variation
+        diffuseColor.g *= 1.0 + 0.14 * (vBladeTint - 0.5);       // subtle hue drift
+        diffuseColor.rgb = mix(diffuseColor.rgb,
+          diffuseColor.rgb * vec3(1.18, 1.08, 0.62), smoothstep(0.75, 1.0, vBladeTint) * 0.5);`);
+  };
+  m.customProgramCacheKey = () => "grass_instanced";
+  return m;
+}
+
+function buildInstancedGrass(root) {
+  root.updateMatrixWorld(true);
+  const lawns = [], blockers = [];
+  const BLOCK_RE = /Pool_|Deck|Lounger|Umbrella|SideTable|Bloom|Bed_Soil|Hedge|Bench|Planter|Path|Trunk|Stepper|Stone/i;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (/^Lawn/.test(o.name)) lawns.push(new THREE.Box3().setFromObject(o));
+    else if (BLOCK_RE.test(o.name)) blockers.push(new THREE.Box3().setFromObject(o));
+  });
+  if (!lawns.length) return;
+
+  let total = 0;
+  const areas = lawns.map((b) => {
+    const a = Math.max(0, (b.max.x - b.min.x) * (b.max.z - b.min.z));
+    total += a;
+    return a;
+  });
+  const budget = Math.min(GRASS_MAX, Math.round(total * GRASS_DENSITY));
+
+  const mesh = new THREE.InstancedMesh(makeBladeGeometry(), grassMaterial(), budget);
+  mesh.name = "Grass_Blades";
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  const M = new THREE.Matrix4(), P = new THREE.Vector3();
+  const Q = new THREE.Quaternion(), S = new THREE.Vector3(), E = new THREE.Euler();
+  let n = 0;
+  lawns.forEach((b, li) => {
+    const count = Math.round(budget * areas[li] / total);
+    const topY = b.max.y + 0.001;
+    for (let i = 0; i < count && n < budget; i++) {
+      const x = b.min.x + Math.random() * (b.max.x - b.min.x);
+      const z = b.min.z + Math.random() * (b.max.z - b.min.z);
+      let blocked = false;
+      for (const k of blockers) {
+        if (x >= k.min.x && x <= k.max.x && z >= k.min.z && z <= k.max.z &&
+            topY >= k.min.y - 0.15 && topY <= k.max.y + 0.6) { blocked = true; break; }
+      }
+      if (blocked) continue;
+      P.set(x, topY, z);
+      E.set((Math.random() - 0.5) * 0.22, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.22);
+      Q.setFromEuler(E);
+      const h = 0.024 + Math.random() * 0.028;               // world-space blade height (manicured)
+      S.set(0.011 + Math.random() * 0.008, h, h);            // bend curve scales with height
+      M.compose(P, Q, S);
+      mesh.setMatrixAt(n++, M);
+    }
+  });
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+  root.add(mesh);   // child of the diorama root: unloads with it automatically
+  // world-space placement must not be re-transformed by the root's scale
+  mesh.matrixAutoUpdate = false;
+  mesh.matrix.copy(root.matrixWorld).invert();
+  mesh.matrixWorldNeedsUpdate = true;
+}
+
 function prepareBuilding(root) {
   patchBuildingOrganics(root);
   const glassMeshes = [];
@@ -288,6 +410,7 @@ function prepareBuilding(root) {
   root.position.x -= center.x;
   root.position.z -= center.z;
   root.position.y -= box2.min.y;
+  buildInstancedGrass(root);   // after scale/center: scatter uses world-space lawns
   return {
     building: true,
     buildingGlass: glass,
@@ -988,6 +1111,7 @@ function mount(container) {
     if (PERF_ON) (window.__FRAMES || (window.__FRAMES = [])).push(t);
     if (state.revealWarming) return; // hold the last dark frame while shaders compile
     if (state.revealTick) state.revealTick(t); // camera+lights update, then render, same frame
+    if (state.grassTime) state.grassTime.value = (t % 1e6) / 1000; // wind sway clock
     if (state.controls && state.controls.enabled) state.controls.update();
     state.renderer.render(state.scene, state.camera);
   };
