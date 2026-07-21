@@ -219,17 +219,49 @@ function prepareBuilding(root) {
   };
 }
 
+// Vertical daylight-sky gradient shown behind the glass in interior view —
+// gives the outside world depth and makes the film's darkening readable.
+function buildingSky() {
+  if (state.buildingSkyTex) return state.buildingSkyTex;
+  const c = document.createElement("canvas");
+  c.width = 2; c.height = 512;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, "#8fbede");
+  g.addColorStop(0.45, "#cde3f0");
+  g.addColorStop(0.62, "#e9f1f2");
+  g.addColorStop(1, "#eef2ec");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2, 512);
+  state.buildingSkyTex = new THREE.CanvasTexture(c);
+  state.buildingSkyTex.colorSpace = THREE.SRGBColorSpace;
+  return state.buildingSkyTex;
+}
+
 function applyBuildingView(view) {
   if (!state.buildingPrep || !state.carRoot) return;
   state.buildingView = view;
   state.carRoot.updateMatrixWorld(true);
-  // soft interior fill so ceilings/back walls don't read as black voids
+  // The car-studio rig lights from above/sides, so building interiors are
+  // shadowed cavities — downward faces (ceilings) read as black voids without
+  // a hemisphere bounce.
+  if (!state.buildingHemi) {
+    // groundColor is what ceilings (downward faces) receive — keep it near-
+    // white with only a hint of warmth or plaster ceilings render taupe
+    state.buildingHemi = new THREE.HemisphereLight(0xffffff, 0xeae5dc, 0.5);
+    state.scene.add(state.buildingHemi);
+  }
+  state.buildingHemi.visible = true;
+  // soft interior fill: warms the room without the specular blowout a strong
+  // near-camera point light causes
   if (!state.interiorFill) {
-    state.interiorFill = new THREE.PointLight(0xfff2e0, 14, 14, 1.6);
+    state.interiorFill = new THREE.PointLight(0xfff2e0, 6, 12, 1.9);
     state.interiorFill.visible = false;
     state.scene.add(state.interiorFill);
   }
   if (view === "interior" && state.buildingPrep.camNode) {
+    state.buildingHemi.intensity = 1.05;
+    state.scene.background = buildingSky();
     const cam = state.persCam;
     cam.fov = 58;
     cam.near = 0.05;
@@ -242,6 +274,8 @@ function applyBuildingView(view) {
     state.interiorFill.position.copy(cam.position).add(new THREE.Vector3(0, 0.5, 0));
     state.interiorFill.visible = true;
   } else {
+    state.buildingHemi.intensity = 0.45;
+    state.scene.background = new THREE.Color(0xf2f3f5);
     state.interiorFill.visible = false;
     const box = new THREE.Box3().setFromObject(state.carRoot);
     const size = box.getSize(new THREE.Vector3());
@@ -264,6 +298,8 @@ function applyBuildingView(view) {
 
 function restoreCarCamera() {
   if (state.interiorFill) state.interiorFill.visible = false;
+  if (state.buildingHemi) state.buildingHemi.visible = false;
+  if (state.scene) state.scene.background = new THREE.Color(0xf2f3f5);
   if (state.scene) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
   if (state.keyLight) state.keyLight.position.set(4.5, 6.5, 3.5);
   if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved

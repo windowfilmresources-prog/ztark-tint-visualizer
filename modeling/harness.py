@@ -28,7 +28,7 @@ from mathutils import Vector
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    out = {"builder": None, "out": "modeling/out/untitled", "glb": True, "blend": False}
+    out = {"builder": None, "out": "modeling/out/untitled", "glb": True, "blend": False, "draco": False}
     i = 0
     while i < len(argv):
         if argv[i] == "--builder":
@@ -37,6 +37,8 @@ def parse_args():
             out["out"] = argv[i + 1]; i += 2
         elif argv[i] == "--no-glb":
             out["glb"] = False; i += 1
+        elif argv[i] == "--draco":
+            out["draco"] = True; i += 1
         elif argv[i] == "--blend":
             out["blend"] = True; i += 1
         else:
@@ -164,10 +166,15 @@ def render_shots(out_dir, cam_scale=1.0):
         bpy.ops.render.render(write_still=True)
 
 
-def export_glb(path):
+def export_glb(path, draco=False):
     for o in bpy.context.scene.objects:
         o.select_set(not o.name.startswith("Studio_"))
-    bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_apply=True)
+    kw = {}
+    if draco:
+        # Blender's own draco keeps empty nodes (InteriorCam/InteriorTarget
+        # anchors) — gltf-pipeline -d strips them
+        kw["export_draco_mesh_compression_enable"] = True
+    bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_apply=True, **kw)
 
 
 def main():
@@ -185,7 +192,7 @@ def main():
 
     render_shots(args["out"], cam_scale=getattr(builder, "CAM_SCALE", 1.0))
     if args["glb"]:
-        export_glb(os.path.join(args["out"], "car.glb"))
+        export_glb(os.path.join(args["out"], "car.glb"), draco=args["draco"])
     if args["blend"]:
         bpy.ops.wm.save_as_mainfile(
             filepath=os.path.abspath(os.path.join(args["out"], "car.blend")))

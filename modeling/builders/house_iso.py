@@ -290,6 +290,9 @@ def build_main(m):
     B("Main_FloorGF", -8.32, 0.32, -0.32, 7.32, 0.0, 0.05, m["oak"])
     B("Main_Slab", -8.32, 0.32, -0.32, 7.32, 3.0, 3.25, W)
     B("Main_FloorUp", -8.32, 0.32, -0.32, 7.32, 3.25, 3.30, m["oak"])
+    # white ceiling under the roof slab — without it the dark roof underside
+    # reads as a black void from the interior camera
+    B("Main_CeilUp", -8.32, 0.32, -0.32, 7.32, 6.05, 6.2, W)
     B("Main_Roof", -9.2, 1.2, -1.2, 8.2, 6.2, 6.55, m["frame"], bevel=0.02)
 
     # glass: ground-floor 4-pane slider wall + upper 3-pane band
