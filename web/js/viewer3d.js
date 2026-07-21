@@ -186,6 +186,7 @@ function splitGlass(mesh, frame) {
 // UV dependence, and it inherits all scene lighting (sun, film dimming).
 const ORGANIC_NOISE_GLSL = `
 varying vec3 vOrganicWP;
+varying float vOrganicNy;
 float zh21(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
 float zh31(vec3 p){ p = fract(p * vec3(127.1, 311.7, 74.7)); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
 float zvn2(vec2 p){
@@ -214,6 +215,8 @@ const ORGANIC_FRAG = {
   `,
   foliage: `
     diffuseColor.rgb *= vec3(1.18, 1.30, 1.02);   // vivid friendly canopy
+    // sun-kissed tops, shaded undersides — the clump cluster reads as one crown
+    diffuseColor.rgb *= 0.86 + 0.30 * clamp(vOrganicNy, 0.0, 1.0);
     float zclump = zvn3(vOrganicWP * 7.0) + 0.5 * zvn3(vOrganicWP * 16.0);
     diffuseColor.rgb *= 0.68 + 0.45 * zclump;
     float zleaf = zh31(floor(vOrganicWP * 55.0));
@@ -231,9 +234,10 @@ function patchOrganicMaterial(mat, kind) {
   mat.userData.organicKind = kind;
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vOrganicWP;")
+      .replace("#include <common>", "#include <common>\nvarying vec3 vOrganicWP;\nvarying float vOrganicNy;")
       .replace("#include <worldpos_vertex>",
-        "#include <worldpos_vertex>\nvOrganicWP = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+        "#include <worldpos_vertex>\nvOrganicWP = (modelMatrix * vec4(transformed, 1.0)).xyz;" +
+        "\nvOrganicNy = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz).y;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\n" + ORGANIC_NOISE_GLSL)
       .replace("#include <color_fragment>", "#include <color_fragment>\n" + ORGANIC_FRAG[kind]);

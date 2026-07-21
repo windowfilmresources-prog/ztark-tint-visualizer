@@ -65,6 +65,7 @@ def mats():
                                 transmission=1.0, ior=1.45),
         "foliage":  _principled("Foliage", (0.075, 0.16, 0.045), roughness=0.8),
         "foliage2": _principled("Foliage_Deep", (0.048, 0.105, 0.028), roughness=0.85),
+        "foliage3": _principled("Foliage_Light", (0.125, 0.24, 0.065), roughness=0.8),
         "lawn":     _principled("Lawn", (0.14, 0.23, 0.06), roughness=0.9),
         "grass_a":  _principled("Grass_Blade_A", (0.16, 0.27, 0.07), roughness=0.85),
         "grass_b":  _principled("Grass_Blade_B", (0.19, 0.25, 0.05), roughness=0.85),
@@ -311,28 +312,59 @@ def grass_tufts(name, x0, x1, y0, y1, z_top, seed=7, step=0.24, avoid=()):
     return ob
 
 
+def _angled_cyl(nm, p0, p1, r, mat_, verts=8):
+    v = Vector(p1) - Vector(p0)
+    mid = (Vector(p0) + Vector(p1)) / 2
+    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=v.length,
+                                        location=mid)
+    ob = bpy.context.active_object
+    ob.name = nm
+    ob.rotation_euler = v.to_track_quat('Z', 'Y').to_euler()
+    bpy.ops.object.transform_apply(rotation=True)
+    return _finish(ob, mat_, 0.0, True)
+
+
 def tree(name, x, y, s, lean=0.0):
+    """Stylized clump-canopy tree: tapered trunk + two branch stubs reaching
+    into an irregular cluster of 6-8 foliage blobs — light tops, deep
+    undersides. Deterministic per tree name."""
     m = mats()
-    C(name + "_Trunk", x, y, 0.0, 1.15 * s, 0.10 * s, m["trunk"],
-      verts=12, rtop=0.055 * s)
-    bpy.ops.mesh.primitive_ico_sphere_add(
-        subdivisions=2, radius=0.85 * s,
-        location=(x + 0.06 * s, y - 0.04 * s, Z0 + 1.45 * s))
-    c1 = bpy.context.active_object
-    c1.name = name + "_Crown1"
-    c1.scale = (1.0, 0.94, 0.82)
-    c1.rotation_euler = (0.1, lean, 0.7)
-    bpy.ops.object.transform_apply(scale=True, rotation=True)
-    _finish(c1, m["foliage"], 0.0, True)
-    bpy.ops.mesh.primitive_ico_sphere_add(
-        subdivisions=2, radius=0.52 * s,
-        location=(x - 0.22 * s, y + 0.18 * s, Z0 + 2.05 * s))
-    c2 = bpy.context.active_object
-    c2.name = name + "_Crown2"
-    c2.scale = (1.0, 0.9, 0.78)
-    c2.rotation_euler = (0.0, -0.15, 1.9)
-    bpy.ops.object.transform_apply(scale=True, rotation=True)
-    _finish(c2, m["foliage2"], 0.0, True)
+    rng = random.Random(sum(ord(c) * 31 for c in name) & 0xffff)
+    # trunk: taper, slight lean baked into top offset
+    top = (x + lean * 0.4 * s, y + rng.uniform(-0.08, 0.08) * s, Z0 + 1.30 * s)
+    _angled_cyl(name + "_Trunk", (x, y, Z0), top, 0.095 * s, m["trunk"], verts=10)
+    zc = Vector((top[0], top[1], top[2] + 0.28 * s))   # canopy heart
+    # two branch stubs into the canopy
+    for bi in range(2):
+        a = rng.uniform(0, 6.283)
+        b_end = (zc.x + math.cos(a) * 0.34 * s, zc.y + math.sin(a) * 0.34 * s,
+                 zc.z + rng.uniform(0.0, 0.18) * s)
+        _angled_cyl("%s_Branch%d" % (name, bi),
+                    (top[0], top[1], top[2] - 0.12 * s), b_end, 0.038 * s,
+                    m["trunk"], verts=7)
+    # canopy: core + shell clumps, material by height in the cluster
+    def clump(ci, cx, cy, cz, r, sq, mat_):
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r,
+                                              location=(cx, cy, cz))
+        ob = bpy.context.active_object
+        ob.name = "%s_Clump%d" % (name, ci)
+        ob.scale = (1.0, 0.96, sq)
+        ob.rotation_euler = (0, 0, rng.uniform(0, 3.1))
+        bpy.ops.object.transform_apply(scale=True, rotation=True)
+        _finish(ob, mat_, 0.0, True)
+    clump(0, zc.x, zc.y, zc.z, 0.60 * s, 0.85, m["foliage"])
+    n_shell = rng.randint(5, 7)
+    for ci in range(n_shell):
+        az = rng.uniform(0, 6.283)
+        el = rng.uniform(0.05, 1.25)            # upper-biased shell
+        d = rng.uniform(0.42, 0.60) * s
+        cx = zc.x + math.cos(az) * math.cos(el) * d
+        cy = zc.y + math.sin(az) * math.cos(el) * d
+        cz = zc.z + math.sin(el) * d * 0.85
+        r = rng.uniform(0.30, 0.46) * s
+        rel = (cz - zc.z) / (0.6 * s)
+        mat_ = m["foliage3"] if rel > 0.45 else (m["foliage2"] if rel < 0.0 else m["foliage"])
+        clump(ci + 1, cx, cy, cz, r, rng.uniform(0.82, 0.95), mat_)
 
 
 # ---------------------------------------------------------------- main volume

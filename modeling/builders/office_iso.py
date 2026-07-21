@@ -96,6 +96,7 @@ def mats():
                      transmission=1.0, ior=1.45),
         "foliage": mat("Foliage", (0.075, 0.16, 0.045), rough=0.8),
         "foliage2": mat("Foliage_Deep", (0.048, 0.105, 0.028), rough=0.85),
+        "foliage3": mat("Foliage_Light", (0.125, 0.24, 0.065), rough=0.8),
         "grass_a": mat("Grass_Blade_A", (0.16, 0.27, 0.07), rough=0.85),
         "grass_b": mat("Grass_Blade_B", (0.19, 0.25, 0.05), rough=0.85),
         "lawn": mat("Lawn", (0.14, 0.23, 0.06), rough=0.9),
@@ -548,26 +549,35 @@ def pendant(M, x, y, shade_z, ceil_z):
 
 
 def tree(M, idx, x, y, h, base_z=Z0):
-    th = h * 0.42
-    cyl("TreeTrunk", M["trunk"], (x, y, base_z + th / 2), 0.125 * h / 2.8,
-        th, verts=10, r2=0.07 * h / 2.8)
+    th = h * 0.46
+    cyl("TreeTrunk", M["trunk"], (x, y, base_z + th / 2), 0.115 * h / 2.8,
+        th, verts=10, r2=0.065 * h / 2.8)
     trunk = bpy.context.active_object
-    heads = []
-    for j, (dz, r, sq) in enumerate(((h * 0.62, h * 0.30, 1.05),
-                                     (h * 0.85, h * 0.20, 0.92))):
-        bpy.ops.mesh.primitive_ico_sphere_add(
-            subdivisions=2, radius=r,
-            location=(x + RNG.uniform(-0.1, 0.1) * h * 0.1,
-                      y + RNG.uniform(-0.1, 0.1) * h * 0.1, base_z + dz))
+    zc = (x, y, base_z + h * 0.66)
+    def clump(ci, cx, cy, cz, r, sq):
+        rel = (cz - zc[2]) / (h * 0.22)
+        mat_ = M["foliage3"] if rel > 0.45 else (M["foliage2"] if rel < 0.0 else M["foliage"])
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r,
+                                              location=(cx, cy, cz))
         ob = bpy.context.active_object
-        ob.scale = (1.0, 0.95, sq)
+        ob.name = "TreeClump_%d_%d" % (idx, ci)
+        ob.scale = (1.0, 0.96, sq)
         ob.rotation_euler = (0, 0, RNG.uniform(0, 3.1))
         bpy.ops.object.transform_apply(scale=True, rotation=True)
-        ob.data.materials.append(M["foliage2"] if j else M["foliage"])
+        ob.data.materials.append(mat_)
         set_active(ob)
         bpy.ops.object.shade_smooth()
-        heads.append(ob)
-    return join("Tree_%d" % idx, [trunk] + heads)
+        bucket("foliage_in", ob)
+    clump(0, zc[0], zc[1], zc[2], h * 0.24, 0.85)
+    for ci in range(RNG.randint(5, 7)):
+        az = RNG.uniform(0, 6.283)
+        el = RNG.uniform(0.05, 1.25)
+        d = RNG.uniform(0.17, 0.24) * h
+        cx = zc[0] + math.cos(az) * math.cos(el) * d
+        cy = zc[1] + math.sin(az) * math.cos(el) * d
+        cz = zc[2] + math.sin(el) * d * 0.85
+        clump(ci + 1, cx, cy, cz, RNG.uniform(0.12, 0.185) * h, RNG.uniform(0.82, 0.95))
+    return trunk
 
 
 def lobby(M):
