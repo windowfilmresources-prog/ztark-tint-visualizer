@@ -17,6 +17,7 @@ HARD CONTRACTS honored here:
 import bpy
 import bmesh
 import math
+import random
 from mathutils import Vector
 
 Z0 = 0.35          # plinth top
@@ -62,7 +63,10 @@ def mats():
         "glass":    _principled("Building_Glass", (1.0, 1.0, 1.0), roughness=0.05,
                                 transmission=1.0, ior=1.45),
         "foliage":  _principled("Foliage", (0.075, 0.16, 0.045), roughness=0.8),
+        "foliage2": _principled("Foliage_Deep", (0.048, 0.105, 0.028), roughness=0.85),
         "lawn":     _principled("Lawn", (0.14, 0.23, 0.06), roughness=0.9),
+        "grass_a":  _principled("Grass_Blade_A", (0.16, 0.27, 0.07), roughness=0.85),
+        "grass_b":  _principled("Grass_Blade_B", (0.19, 0.25, 0.05), roughness=0.85),
         "trunk":    _principled("Trunk", (0.19, 0.12, 0.06), roughness=0.85),
         "water":    _principled("Pool_Water", (0.30, 0.55, 0.68), roughness=0.08),
         "fabric":   _principled("Sofa_Fabric", (0.58, 0.55, 0.50), roughness=0.9),
@@ -203,6 +207,12 @@ def build_site(m):
     B("Lawn_Front", -9.9, 9.9, -7.7, -2.7, -0.01, 0.03, m["lawn"])
     B("Lawn_Left", -9.9, -8.7, -2.7, 7.0, -0.01, 0.03, m["lawn"])
     B("Lawn_Right", 7.7, 9.9, -2.7, 6.8, -0.01, 0.03, m["lawn"])
+    grass_tufts("Turf_Front", -9.9, 9.9, -7.7, -2.7, Z0 + 0.03, seed=11,
+                avoid=((-6.4, -0.6, -6.75, -3.65),    # pool + coping
+                       (-6.4, -0.6, -7.55, -6.5),     # deck
+                       (0.0, 2.3, -6.6, -3.4)))       # loungers/umbrella pad
+    grass_tufts("Turf_Left", -9.9, -8.7, -2.7, 7.0, Z0 + 0.03, seed=12)
+    grass_tufts("Turf_Right", 7.7, 9.9, -2.7, 6.8, Z0 + 0.03, seed=13)
 
     # pool: concrete rim (basin) + glossy water inside + oak deck strip
     B("Pool_RimN", -6.25, -0.75, -4.05, -3.80, 0.02, 0.16, m["concrete"], bevel=0.04, smooth=True)
@@ -241,6 +251,51 @@ def build_site(m):
           bevel=0.14, smooth=True)
 
 
+def grass_tufts(name, x0, x1, y0, y1, z_top, seed=7, step=0.24, avoid=()):
+    """Low-poly turf: crossed-triangle blade clumps scattered over a lawn
+    rect. Two green tones on alternating clumps give the surface depth; the
+    seeded RNG keeps rebuilds deterministic. ~2 tris per tuft — cheap.
+    avoid: (x0,x1,y0,y1) rects (pool, deck...) that get no tufts.
+    Blades are small (4-9 cm) so the interior camera reads turf, not
+    miniature pine trees."""
+    m = mats()
+    rng = random.Random(seed)
+    bm = bmesh.new()
+    yv = y0 + step / 2
+    while yv < y1:
+        xv = x0 + step / 2
+        while xv < x1:
+            cx = xv + rng.uniform(-0.09, 0.09)
+            cy = yv + rng.uniform(-0.09, 0.09)
+            if any(a[0] <= cx <= a[1] and a[2] <= cy <= a[3] for a in avoid):
+                xv += step
+                continue
+            hgt = rng.uniform(0.04, 0.09)
+            w = rng.uniform(0.02, 0.04)
+            a = rng.uniform(0, math.pi)
+            lx = rng.uniform(-0.04, 0.04)
+            ly = rng.uniform(-0.04, 0.04)
+            mi = 0 if rng.random() < 0.62 else 1
+            for k in range(2):
+                aa = a + k * math.pi / 2 + rng.uniform(-0.35, 0.35)
+                dx, dy = math.cos(aa) * w, math.sin(aa) * w
+                v1 = bm.verts.new((cx - dx, cy - dy, z_top))
+                v2 = bm.verts.new((cx + dx, cy + dy, z_top))
+                v3 = bm.verts.new((cx + lx, cy + ly, z_top + hgt))
+                f = bm.faces.new((v1, v2, v3))
+                f.material_index = mi
+            xv += step
+        yv += step
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.data.materials.append(m["grass_a"])
+    ob.data.materials.append(m["grass_b"])
+    return ob
+
+
 def tree(name, x, y, s, lean=0.0):
     m = mats()
     C(name + "_Trunk", x, y, 0.0, 1.15 * s, 0.10 * s, m["trunk"],
@@ -262,7 +317,7 @@ def tree(name, x, y, s, lean=0.0):
     c2.scale = (1.0, 0.9, 0.78)
     c2.rotation_euler = (0.0, -0.15, 1.9)
     bpy.ops.object.transform_apply(scale=True, rotation=True)
-    _finish(c2, m["foliage"], 0.0, True)
+    _finish(c2, m["foliage2"], 0.0, True)
 
 
 # ---------------------------------------------------------------- main volume

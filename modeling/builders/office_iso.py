@@ -95,6 +95,9 @@ def mats():
         "glass": mat("Building_Glass", (1.0, 1.0, 1.0), rough=0.05,
                      transmission=1.0, ior=1.45),
         "foliage": mat("Foliage", (0.075, 0.16, 0.045), rough=0.8),
+        "foliage2": mat("Foliage_Deep", (0.048, 0.105, 0.028), rough=0.85),
+        "grass_a": mat("Grass_Blade_A", (0.16, 0.27, 0.07), rough=0.85),
+        "grass_b": mat("Grass_Blade_B", (0.19, 0.25, 0.05), rough=0.85),
         "lawn": mat("Lawn", (0.14, 0.23, 0.06), rough=0.9),
         "trunk": mat("Trunk", (0.35, 0.26, 0.18), rough=0.8),
         "wfurn": mat("Furniture_White", (0.92, 0.92, 0.90), rough=0.5),
@@ -560,7 +563,7 @@ def tree(M, idx, x, y, h, base_z=Z0):
         ob.scale = (1.0, 0.95, sq)
         ob.rotation_euler = (0, 0, RNG.uniform(0, 3.1))
         bpy.ops.object.transform_apply(scale=True, rotation=True)
-        ob.data.materials.append(M["foliage"])
+        ob.data.materials.append(M["foliage2"] if j else M["foliage"])
         set_active(ob)
         bpy.ops.object.shade_smooth()
         heads.append(ob)
@@ -637,6 +640,43 @@ def office_floor(M, k):
 
 
 # ------------------------------------------------------------------ landscape
+def grass_tufts(M, name, x0, x1, y0, y1, z_top, seed=7, step=0.24):
+    """Low-poly turf: small crossed-triangle blade clumps (4-9 cm), two
+    green tones, seeded for deterministic rebuilds (~2 tris per tuft)."""
+    rng = random.Random(seed)
+    bm = bmesh.new()
+    yv = y0 + step / 2
+    while yv < y1:
+        xv = x0 + step / 2
+        while xv < x1:
+            cx = xv + rng.uniform(-0.09, 0.09)
+            cy = yv + rng.uniform(-0.09, 0.09)
+            hgt = rng.uniform(0.04, 0.09)
+            w = rng.uniform(0.02, 0.04)
+            a = rng.uniform(0, math.pi)
+            lx = rng.uniform(-0.04, 0.04)
+            ly = rng.uniform(-0.04, 0.04)
+            mi = 0 if rng.random() < 0.62 else 1
+            for k in range(2):
+                aa = a + k * math.pi / 2 + rng.uniform(-0.35, 0.35)
+                dx, dy = math.cos(aa) * w, math.sin(aa) * w
+                v1 = bm.verts.new((cx - dx, cy - dy, z_top))
+                v2 = bm.verts.new((cx + dx, cy + dy, z_top))
+                v3 = bm.verts.new((cx + lx, cy + ly, z_top + hgt))
+                f = bm.faces.new((v1, v2, v3))
+                f.material_index = mi
+            xv += step
+        yv += step
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.data.materials.append(M["grass_a"])
+    ob.data.materials.append(M["grass_b"])
+    return ob
+
+
 def landscape(M):
     z = Z0
     # pathway from the entry to the plinth edge
@@ -646,6 +686,9 @@ def landscape(M):
         group="lawn")
     box("Lawn_FR", M["lawn"], 0.3, 9.3, 4.0, 7.5, z, z + 0.018, group="lawn")
     box("Lawn_R", M["lawn"], 6.6, 9.4, -6.8, 3.4, z, z + 0.018, group="lawn")
+    grass_tufts(M, "Turf_FL", -9.3, -3.1, 4.0, 7.6, z + 0.018, seed=21)
+    grass_tufts(M, "Turf_FR", 0.3, 9.3, 4.0, 7.5, z + 0.018, seed=22)
+    grass_tufts(M, "Turf_R", 6.6, 9.4, -6.8, 3.4, z + 0.018, seed=23)
     # hedges along the base
     hg = M["foliage"]
     box("Hedge_FL", hg, BX0 + 0.3, EX0 - 0.45, 3.32, 3.78, z, z + 0.52,
