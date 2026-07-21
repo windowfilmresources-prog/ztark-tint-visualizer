@@ -882,16 +882,9 @@
   renderShades();
   setupSavings();
   setupBSavings();
-  track("viz_view", brandId + (qs.get("space") ? " " + qs.get("space") : ""));
+  track("viz_view", brandId);
   document.getElementById("dealerBtn").addEventListener("click", () =>
     track("viz_dealer_click", S.space, (S.bs && S.bs.usState) || S.usState));
-
-  // ?space=residential|commercial deep-links the architectural viewer
-  // (e.g. the retired dealers.z-tark.com/home/ redirects here)
-  const spaceParam = (qs.get("space") || "").toLowerCase();
-  if (BCAT && MODE_3D && (spaceParam === "residential" || spaceParam === "commercial")) {
-    enterSpace(spaceParam);
-  }
   renderSpecs();
   renderLawSelect();
   renderLaw();
