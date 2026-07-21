@@ -88,9 +88,9 @@ def mat(name, color, rough=0.5, metal=0.0, transmission=0.0, ior=None,
 def mats():
     return {
         "plaster": mat("Plaster_White", (0.90, 0.90, 0.88), rough=0.8),
-        "concrete": mat("Concrete_Warm", (0.80, 0.78, 0.74), rough=0.85),
-        "path": mat("Concrete_Path", (0.86, 0.84, 0.80), rough=0.85),
-        "oak": mat("Oak_Warm", (0.62, 0.45, 0.28), rough=0.6),
+        "concrete": mat("Concrete_Warm", (0.58, 0.55, 0.49), rough=0.85),
+        "path": mat("Concrete_Path", (0.68, 0.64, 0.57), rough=0.85),
+        "oak": mat("Oak_Warm", (0.33, 0.17, 0.065), rough=0.6),
         "frame": mat("Frame_Dark", (0.13, 0.14, 0.15), rough=0.5, metal=0.3),
         "glass": mat("Building_Glass", (1.0, 1.0, 1.0), rough=0.05,
                      transmission=1.0, ior=1.45),
@@ -99,15 +99,15 @@ def mats():
         "grass_a": mat("Grass_Blade_A", (0.16, 0.27, 0.07), rough=0.85),
         "grass_b": mat("Grass_Blade_B", (0.19, 0.25, 0.05), rough=0.85),
         "lawn": mat("Lawn", (0.14, 0.23, 0.06), rough=0.9),
-        "trunk": mat("Trunk", (0.35, 0.26, 0.18), rough=0.8),
-        "wfurn": mat("Furniture_White", (0.92, 0.92, 0.90), rough=0.5),
+        "trunk": mat("Trunk", (0.19, 0.12, 0.06), rough=0.8),
+        "wfurn": mat("Furniture_White", (0.78, 0.775, 0.74), rough=0.5),
         "dfurn": mat("Furniture_Dark", (0.10, 0.10, 0.11), rough=0.6),
         "pot": mat("Pot_Dark", (0.18, 0.18, 0.19), rough=0.7),
         "hvac": mat("HVAC_Grey", (0.72, 0.73, 0.74), rough=0.6, metal=0.2),
-        "gravel": mat("Roof_Gravel", (0.64, 0.62, 0.58), rough=0.95),
+        "gravel": mat("Roof_Gravel", (0.40, 0.375, 0.33), rough=0.95),
         "emit": mat("Pendant_Emit", (1.0, 0.8, 0.55), rough=0.4,
                     emit=(1.0, 0.75, 0.45), estr=2.0),
-        "rug": mat("Rug_Warm", (0.45, 0.42, 0.38), rough=0.9),
+        "rug": mat("Rug_Warm", (0.24, 0.20, 0.155), rough=0.9),
     }
 
 

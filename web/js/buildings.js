@@ -9,13 +9,13 @@ window.BUILDINGS = {
   scenes: {
     residential: {
       label: "Residential",
-      glb: "assets/models/buildings/house.glb?v=5",
+      glb: "assets/models/buildings/house.glb?v=6",
       credit: "ZTARK original concept architecture",
       isoDir: [-1, 0.62, 1],   // slider walls face +Z, wing glass -X
     },
     commercial: {
       label: "Commercial",
-      glb: "assets/models/buildings/office.glb?v=4",
+      glb: "assets/models/buildings/office.glb?v=5",
       credit: "ZTARK original concept architecture",
       isoDir: [-1, 0.62, -1],  // curtain-wall front + entry face -X/-Z
     },

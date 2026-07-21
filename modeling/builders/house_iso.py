@@ -57,8 +57,9 @@ def mats():
         return _M
     _M.update({
         "plaster":  _principled("White_Plaster", (0.90, 0.90, 0.88), roughness=0.8),
-        "concrete": _principled("Warm_Concrete", (0.80, 0.78, 0.74), roughness=0.85),
-        "oak":      _principled("Warm_Oak", (0.62, 0.45, 0.28), roughness=0.6),
+        "concrete": _principled("Warm_Concrete", (0.58, 0.55, 0.49), roughness=0.85),
+        "oak":      _principled("Warm_Oak", (0.33, 0.17, 0.065), roughness=0.6),
+        "oak2":     _principled("Warm_Oak_Light", (0.40, 0.225, 0.095), roughness=0.6),
         "frame":    _principled("Dark_Frame", (0.13, 0.14, 0.15), metallic=0.3, roughness=0.5),
         "glass":    _principled("Building_Glass", (1.0, 1.0, 1.0), roughness=0.05,
                                 transmission=1.0, ior=1.45),
@@ -68,10 +69,16 @@ def mats():
         "grass_a":  _principled("Grass_Blade_A", (0.16, 0.27, 0.07), roughness=0.85),
         "grass_b":  _principled("Grass_Blade_B", (0.19, 0.25, 0.05), roughness=0.85),
         "trunk":    _principled("Trunk", (0.19, 0.12, 0.06), roughness=0.85),
-        "water":    _principled("Pool_Water", (0.30, 0.55, 0.68), roughness=0.08),
-        "fabric":   _principled("Sofa_Fabric", (0.58, 0.55, 0.50), roughness=0.9),
-        "fabric2":  _principled("Cushion_Fabric", (0.70, 0.66, 0.58), roughness=0.9),
-        "rug":      _principled("Rug", (0.78, 0.73, 0.64), roughness=0.95),
+        "water":    _principled("Pool_Water", (0.075, 0.26, 0.42), roughness=0.08),
+        "fabric":   _principled("Sofa_Fabric", (0.28, 0.255, 0.215), roughness=0.9),
+        "fabric2":  _principled("Cushion_Fabric", (0.44, 0.385, 0.30), roughness=0.9),
+        "accent1":  _principled("Pillow_Terracotta", (0.40, 0.11, 0.05), roughness=0.9),
+        "accent2":  _principled("Pillow_Olive", (0.16, 0.18, 0.065), roughness=0.9),
+        "curtain":  _principled("Curtain_Linen", (0.62, 0.575, 0.50), roughness=0.95),
+        "soil":     _principled("Bed_Soil", (0.085, 0.055, 0.035), roughness=0.95),
+        "bloom1":   _principled("Bloom_Coral", (0.55, 0.12, 0.09), roughness=0.7),
+        "bloom2":   _principled("Bloom_White", (0.75, 0.72, 0.62), roughness=0.7),
+        "rug":      _principled("Rug", (0.50, 0.43, 0.33), roughness=0.95),
         "lamp":     _principled("Lamp_Shade", (1.0, 0.88, 0.66), roughness=0.4,
                                 emission=(1.0, 0.80, 0.52), emission_strength=2.0),
     })
@@ -207,6 +214,19 @@ def build_site(m):
     B("Lawn_Front", -9.9, 9.9, -7.7, -2.7, -0.01, 0.03, m["lawn"])
     B("Lawn_Left", -9.9, -8.7, -2.7, 7.0, -0.01, 0.03, m["lawn"])
     B("Lawn_Right", 7.7, 9.9, -2.7, 6.8, -0.01, 0.03, m["lawn"])
+    B("Bed_Soil", -8.3, -1.0, -2.55, -1.85, -0.005, 0.045, m["soil"])
+    _bed_rng = random.Random(31)
+    for bi in range(11):
+        bx = -8.0 + bi * 0.65 + _bed_rng.uniform(-0.12, 0.12)
+        by = _bed_rng.uniform(-2.42, -2.0)
+        bs = _bed_rng.uniform(0.055, 0.10)
+        bm_ = m["bloom1"] if _bed_rng.random() < 0.55 else m["bloom2"]
+        C("Bloom%d_Stem" % bi, bx, by, 0.04, 0.16 + bs, 0.012, m["foliage"], verts=6)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=bs,
+                                              location=(bx, by, Z0 + 0.18 + bs))
+        _bo = bpy.context.active_object
+        _bo.name = "Bloom%d" % bi
+        _finish(_bo, bm_, 0.0, True)
     grass_tufts("Turf_Front", -9.9, 9.9, -7.7, -2.7, Z0 + 0.03, seed=11,
                 avoid=((-6.4, -0.6, -6.75, -3.65),    # pool + coping
                        (-6.4, -0.6, -7.55, -6.5),     # deck
@@ -343,6 +363,14 @@ def build_main(m):
     B("MainWall_FUTop", -8.5, 0.5, -0.5, -0.32, 5.3, 6.2, W)
     # floors / ceiling / roof
     B("Main_FloorGF", -8.32, 0.32, -0.32, 7.32, 0.0, 0.05, m["oak"])
+    px = -8.32
+    pi = 0
+    while px < 0.32:
+        if pi % 2 == 0:
+            B("Main_Plank%d" % pi, px, min(px + 0.17, 0.32), -0.32, 7.32,
+              0.05, 0.052, m["oak2"])
+        px += 0.17
+        pi += 1
     B("Main_Slab", -8.32, 0.32, -0.32, 7.32, 3.0, 3.25, W)
     B("Main_FloorUp", -8.32, 0.32, -0.32, 7.32, 3.25, 3.30, m["oak"])
     # white ceiling under the roof slab — without it the dark roof underside
@@ -390,6 +418,14 @@ def build_wing(m):
     B("Wing_HeadS", 7.32, 7.5, -2.5, 1.4, 2.55, 2.75, m["frame"])
     # floor / ceiling / roof
     B("Wing_Floor", 0.5, 7.32, -2.32, 3.32, 0.0, 0.05, O)
+    wx = 0.5
+    wi = 0
+    while wx < 7.32:
+        if wi % 2 == 0:
+            B("Wing_Plank%d" % wi, wx, min(wx + 0.17, 7.32), -2.32, 3.32,
+              0.05, 0.052, m["oak2"])
+        wx += 0.17
+        wi += 1
     B("Wing_Ceil", 0.5, 7.32, -2.32, 3.32, 2.60, 2.75, m["plaster"])
     B("Wing_Roof", 0.35, 8.15, -3.1, 4.1, 2.75, 3.08, m["frame"], bevel=0.02)
 
@@ -416,10 +452,24 @@ def build_living(m):
     B("Sofa_Cush1", -5.72, -4.56, 3.05, 3.32, fl + 0.40, fl + 0.78, m["fabric2"], bevel=0.04, smooth=True)
     B("Sofa_Cush2", -4.46, -3.28, 3.05, 3.32, fl + 0.40, fl + 0.78, m["fabric2"], bevel=0.04, smooth=True)
     B("Sofa_Arm", -3.2, -3.02, 2.45, 3.42, fl, fl + 0.55, m["fabric"], bevel=0.03, smooth=True)
+    # throw pillows (rotated so they read tossed, not stacked)
+    B("Pillow1", -5.55, -5.15, 2.95, 3.30, fl + 0.40, fl + 0.62, m["accent1"],
+      bevel=0.05, smooth=True, rot=(0, 0, 0.25))
+    B("Pillow2", -3.85, -3.45, 2.98, 3.30, fl + 0.40, fl + 0.60, m["accent2"],
+      bevel=0.05, smooth=True, rot=(0, 0, -0.35))
+    B("Pillow3", -5.70, -5.35, 1.55, 1.95, fl + 0.40, fl + 0.60, m["fabric2"],
+      bevel=0.05, smooth=True, rot=(0, 0, 0.5))
+    # linen curtain panels flanking the slider wall (inside)
+    B("CurtainL", -7.95, -7.45, -0.12, 0.0, fl, 2.82, m["curtain"], bevel=0.02)
+    B("CurtainR", -0.95, -0.45, -0.12, 0.0, fl, 2.82, m["curtain"], bevel=0.02)
     # coffee table between sofa and armchair
     B("Coffee_Top", -4.75, -3.95, 0.95, 1.55, fl + 0.32, fl + 0.38, m["oak"], bevel=0.012)
     for dx, dy in ((-4.70, 1.00), (-4.05, 1.00), (-4.70, 1.45), (-4.05, 1.45)):
         B("Coffee_Leg", dx, dx + 0.05, dy, dy + 0.05, fl, fl + 0.32, m["frame"])
+    # styling: book stack + bowl
+    B("Coffee_Book1", -4.62, -4.30, 1.05, 1.28, fl + 0.38, fl + 0.41, m["accent2"])
+    B("Coffee_Book2", -4.58, -4.34, 1.08, 1.25, fl + 0.41, fl + 0.435, m["rug"])
+    C("Coffee_Bowl", -4.15, 1.32, fl + 0.38, fl + 0.46, 0.09, m["concrete"], verts=14, rtop=0.11)
     # right-side vignette by the sliders: armchair + floor lamp + tall plant
     # (sits inside the InteriorCam view cone, which crosses the room diagonally)
     B("Chair_Seat", -3.75, -3.05, 0.45, 1.15, fl, fl + 0.40, m["fabric"], bevel=0.03, smooth=True)
