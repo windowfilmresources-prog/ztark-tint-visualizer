@@ -179,8 +179,14 @@
       window.VIEWER3D.loadBuilding({ urls: [scene.glb], credit: scene.credit, isoDir: scene.isoDir });
       window.VIEWER3D.setBuildingFilm(bFilm());
     };
-    if (window.VIEWER3D) boot();
-    else document.addEventListener("viewer3d-ready", boot, { once: true });
+    const start = () => {
+      if (window.VIEWER3D) boot();
+      else document.addEventListener("viewer3d-ready", boot, { once: true });
+    };
+    // brand opener playing (?space= deep-link lands here at boot): hold the
+    // GPU-heavy viewer boot until it dismisses, same as the vehicle path
+    if (window.__INTRO_DONE) window.__INTRO_DONE.then(start);
+    else start();
     renderBadge();
   }
 
@@ -199,6 +205,8 @@
         <div class="photo-credit" id="modelCredit"></div>`;
       const boot = () => {
         if (!MODE_3D) return; // abandon3D may have fired while the module loaded
+        if (S.space !== "vehicles") return; // ?space= deep-link or user switched
+                                            // to a building while we were queued
         const el = document.getElementById("viewer3d");
         if (!el) return;
         window.VIEWER3D.mount(el);
