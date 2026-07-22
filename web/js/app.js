@@ -130,7 +130,9 @@
     MODE_3D = false;
     $("stage").classList.remove("cine"); // reveal never played; chrome must show
     computeModes();
-    if (S.space !== "vehicles") enterSpace("vehicles"); // buildings need 3D
+    // photo-mode building scenes don't need WebGL — only kick back to
+    // vehicles if the current space would have required the 3D diorama
+    if (S.space !== "vehicles" && !(BSCENES[S.space] && BSCENES[S.space].photo)) enterSpace("vehicles");
     S.vehicle = FLEET2D[0].id;
     renderStageTools();
     renderVehicle();
@@ -164,6 +166,18 @@
 
   function renderBuilding() {
     const scene = BSCENES[S.space];
+    if (scene.photo) {
+      // photo mode: a real interior photograph with a traced glass mask —
+      // no 3D boot, instant, works everywhere
+      $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
+        <div id="photoviz"></div>
+        <div class="stage-hint" id="stageHint">Real interior — pick a film to see the glass and the room change</div>
+        <div class="photo-credit">${scene.photo.credit || ""}</div>`;
+      window.PHOTOVIZ.mount(document.getElementById("photoviz"));
+      window.PHOTOVIZ.load(scene.photo).then(() => window.PHOTOVIZ.setFilm(bFilm()));
+      renderBadge();
+      return;
+    }
     $("stage").innerHTML = `<div class="badge-vlt" id="vltBadge"></div>
       <div id="viewer3d"></div>
       <div class="stage-hint" id="stageHint">${(bSel().view || "exterior") === "interior"
@@ -191,7 +205,12 @@
   }
 
   function updateBuildingFilm() {
-    if (window.VIEWER3D) window.VIEWER3D.setBuildingFilm(S.comparing ? null : bFilm());
+    const scene = BSCENES[S.space];
+    if (scene && scene.photo && window.PHOTOVIZ && window.PHOTOVIZ.active) {
+      window.PHOTOVIZ.setFilm(S.comparing ? null : bFilm());
+    } else if (window.VIEWER3D) {
+      window.VIEWER3D.setBuildingFilm(S.comparing ? null : bFilm());
+    }
     renderBadge();
     renderBSavings();
   }
@@ -413,7 +432,8 @@
 
   function renderSpaceTabs() {
     let el = $("spaceTabs");
-    if (!BCAT || !MODE_3D) { if (el) el.parentElement.style.display = "none"; return; }
+    const photoSpaces = Object.values(BSCENES).some((s) => s.photo);
+    if (!BCAT || (!MODE_3D && !photoSpaces)) { if (el) el.parentElement.style.display = "none"; return; }
     if (!el) {
       const group = document.createElement("div");
       group.className = "group";
@@ -435,6 +455,8 @@
 
   function renderViewTabs(show) {
     let el = $("viewTabs");
+    // photo mode has a single fixed view — no Exterior/Interior toggle
+    if (show && S.space !== "vehicles" && BSCENES[S.space] && BSCENES[S.space].photo) show = false;
     if (!show) { if (el) el.parentElement.style.display = "none"; return; }
     if (!el) {
       const group = document.createElement("div");

@@ -9,12 +9,22 @@ window.BUILDINGS = {
   scenes: {
     residential: {
       label: "Residential",
+      photo: {
+        src: "assets/photos/res.jpg?v=1",
+        mask: "assets/photos/res_mask.png?v=1",
+        credit: "Photo: Unsplash",
+      },
       glb: "assets/models/buildings/house.glb?v=8",
       credit: "ZTARK original concept architecture",
       isoDir: [-1, 0.62, 1],   // slider walls face +Z, wing glass -X
     },
     commercial: {
       label: "Commercial",
+      photo: {
+        src: "assets/photos/com.jpg?v=1",
+        mask: "assets/photos/com_mask.png?v=1",
+        credit: "Photo: Unsplash",
+      },
       glb: "assets/models/buildings/office.glb?v=7",
       credit: "ZTARK original concept architecture",
       isoDir: [-1, 0.62, -1],  // curtain-wall front + entry face -X/-Z
