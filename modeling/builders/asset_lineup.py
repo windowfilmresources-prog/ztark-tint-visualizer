@@ -9,11 +9,11 @@ SELF_WORLD = True
 SUN_ENERGY = 4.0
 
 ASSETS = [
-    "sofa_02", "sofa_03", "ArmChair_01", "CoffeeTable_01",
-    "coffee_table_round_01", "side_table_01", "drawer_cabinet",
-    "fancy_picture_frame_01", "standing_picture_frame_01", "potted_plant_04",
+    "modern_arm_chair_01", "mid_century_lounge_chair", "modern_coffee_table_01",
+    "Ottoman_01", "modern_wooden_cabinet",
 ]
 GAP = 2.6
+TOP_VIEW = bool(os.environ.get("LINEUP_TOP"))  # overhead pass for orientation
 AROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "assets", "polyhaven", "models")
 
@@ -58,8 +58,8 @@ def build():
 
     cx = (len(ASSETS) - 1) * GAP / 2
     cam = bpy.data.objects.new("InteriorCam", None)
-    cam.location = (cx, -13.5, 4.2)
+    cam.location = (cx, -0.01, 16.0) if TOP_VIEW else (cx, -13.5, 4.2)
     bpy.context.collection.objects.link(cam)
     tgt = bpy.data.objects.new("InteriorTarget", None)
-    tgt.location = (cx, 0, 0.5)
+    tgt.location = (cx, 0, 0.5) if not TOP_VIEW else (cx, 0, 0)
     bpy.context.collection.objects.link(tgt)

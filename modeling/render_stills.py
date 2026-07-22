@@ -173,7 +173,7 @@ def main():
     sc.render.engine = "CYCLES"
     sc.cycles.samples = SAMPLES
     sc.cycles.use_denoising = True
-    sc.cycles.texture_limit_render = "512" if FAST else "1024" if PROBE else "2048"  # VRAM guard
+    sc.cycles.texture_limit_render = "512" if (FAST or PROBE) else "1024"  # VRAM guard (2048 OOMs with full env)
     try:
         sc.cycles.device = "GPU"
         prefs = bpy.context.preferences.addons["cycles"].preferences

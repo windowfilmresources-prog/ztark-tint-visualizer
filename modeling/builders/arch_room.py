@@ -212,24 +212,27 @@ def build():
         g = box(f"Glass_{i}", x + 0.03, x + pw - 0.03, yF - 0.006, yF + 0.006,
                 0.05, H - 0.12, m_glass)
 
-    # curtains flanking the glass, gentle sine folds
+    # curtains flanking the glass — fine mesh + deeper folds + hem off the
+    # floor so the base doesn't read as a solid box in shadow
     for side, cx in (("L", X0 + 0.55), ("R", X1 - 0.55)):
         bpy.ops.mesh.primitive_plane_add(size=1)
         cu = bpy.context.active_object
         cu.name = f"Curtain_{side}"
-        cu.scale = (1.0, 2.75, 1)
+        cu.scale = (1.0, 2.7, 1)
         bpy.ops.object.transform_apply(scale=True)
         cu.rotation_euler = (math.pi / 2, 0, 0)
-        cu.location = (cx, yF + 0.16, H / 2 - 0.03)
+        cu.location = (cx, yF + 0.16, H / 2 + 0.04)
         bpy.ops.object.transform_apply(rotation=True)
         bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.subdivide(number_cuts=40)
+        bpy.ops.mesh.subdivide(number_cuts=64)
         bpy.ops.object.mode_set(mode="OBJECT")
         me = cu.data
         for v in me.vertices:
-            v.co.y += 0.05 * math.sin(v.co.x * 24.0)
+            # folds deepen slightly toward the hem, plus a soft secondary wave
+            depth = 0.07 * math.sin(v.co.x * 21.0) + 0.02 * math.sin(v.co.x * 55.0 + 1.3)
+            v.co.y += depth * (0.75 + 0.25 * (0.5 - v.co.z))
         sol = cu.modifiers.new("sol", "SOLIDIFY")
-        sol.thickness = 0.008
+        sol.thickness = 0.006
         cu.data.materials.append(m_linen)
 
     # rug under the seating group — large, anchors the whole conversation area
@@ -281,21 +284,26 @@ def build():
     soft_box("Throw1", _sx - 0.75, _sy + 0.22, 0.42, 0.16, 0.37, 0.4, m_throw, bevel=0.07, rz=0.18)
     soft_box("Throw2", _sx + 0.85, _sy + 0.22, 0.42, 0.16, 0.37, 0.4, m_boucle, bevel=0.07, rz=-0.12)
 
-    # modern seating + tables (PolyHaven)
-    append_asset("modern_arm_chair_01", at=(-2.0, -0.7, 0), rot_z=math.radians(-35))
-    append_asset("mid_century_lounge_chair", at=(1.85, -0.85, 0), rot_z=math.radians(-120))
-    append_asset("Ottoman_01", at=(1.15, -1.45, 0), rot_z=math.radians(15), scale=0.75)
-    append_asset("modern_coffee_table_01", at=(-0.3, 0.2, 0), rot_z=math.radians(90))
-    append_asset("ceramic_vase_03", at=(-0.1, 0.15, 0.46), scale=0.7)
-    append_asset("decorative_book_set_01", at=(-0.6, 0.3, 0.455), rot_z=0.4, scale=0.85)
+    # modern seating (PolyHaven) — U-shaped conversation group: sofa anchors
+    # the north side facing the view, the two chairs close the circle from the
+    # glass side angled back toward the sofa, ottoman ends the U on the west
+    append_asset("modern_coffee_table_01", at=(-0.3, 0.2, 0))  # long side parallel to sofa
+    append_asset("ceramic_vase_03", at=(-0.1, 0.15, 0.39), scale=0.7)  # table top 0.390
     # slatted-wood console + slim black frame on the +X wall
-    append_asset("modern_wooden_cabinet", at=(3.9, 0.35, 0), rot_z=math.radians(-90))
-    append_asset("brass_vase_03", at=(3.88, 0.15, 0.78))
+    _cab = append_asset("modern_wooden_cabinet", at=(3.9, 0.35, 0), rot_z=math.radians(-90))
+    # the asset ships a spare door mesh parked ~3m from the body — drop any
+    # child authored far from the asset origin
+    for _ch in list(_cab.children):
+        if _ch.location.length > 1.2:
+            bpy.data.objects.remove(_ch, do_unlink=True)
+    append_asset("brass_vase_03", at=(3.88, 0.15, 0.68))  # cabinet top 0.680
     append_asset("hanging_picture_frame_01", at=(4.16, 0.35, 1.7), rot_z=math.radians(-90), scale=1.6)
-    # greenery near the glass
-    append_asset("potted_plant_01", at=(3.5, -2.1, 0), rot_z=0.7)
-    append_asset("potted_plant_04", at=(-3.75, -2.25, 0), rot_z=2.1)
-    append_asset("modern_ceiling_lamp_01", at=(-0.4, 0.25, H))
+    # greenery: terracotta floor plants clashed with the modern room — the
+    # white-pot succulent styles the console instead
+    append_asset("potted_plant_04", at=(3.88, 0.62, 0.68), rot_z=2.1, scale=0.9)
+    # lamp mesh is authored 0.22-1.17 ABOVE its origin — drop the root so the
+    # pendant actually hangs below the ceiling instead of inside the roof
+    append_asset("modern_ceiling_lamp_01", at=(-0.4, 0.25, H - 1.17))
     # soft interior fill so furniture against the bright glass doesn't
     # silhouette — standard archviz practice, kept subtle
     _fd = bpy.data.lights.new("FillArea", type="AREA")
@@ -309,6 +317,9 @@ def build():
     # ---------------- outside: patio, planters, trees, pool ----------------
     pat = plane("Patio", X0 - 2, X1 + 2, Y0 - 2.1, Y0, -0.02, m_pavers)
     uv_box(pat, 1.0)
+    # cedar planters on the patio, kept clear of the drape lines
+    append_asset("planter_box_01", at=(-2.1, Y0 - 1.25, 0), rot_z=0.04)
+    append_asset("planter_box_01", at=(2.3, Y0 - 1.1, 0), rot_z=-0.06)
     m_lawn = pbr("YardLawn", "grass_medium_01", scale=9.0, bump=0.6)
     # saturate the ground read; the hair grass on top carries the realism
     _sat = m_lawn.node_tree.nodes.new("ShaderNodeHueSaturation")
@@ -355,13 +366,8 @@ def build():
         # layout-iteration mode: lawn detail is irrelevant, cut the hair cost
         pset.count = 3500
         pset.rendered_child_count = 2
-    append_asset("planter_box_01", at=(-3.4, Y0 - 1.0, 0))
-    append_asset("planter_box_01", at=(2.2, Y0 - 1.0, 0), rot_z=0.03)
     _FAST = bool(__import__("os").environ.get("ZT_FAST"))  # layout-draft mode
-    if not _FAST:  # trees are the scene's memory hogs — drafts skip them
-        append_asset("jacaranda_tree", at=(-16.5, Y0 - 10.0, 0), scale=1.0)
-        append_asset("jacaranda_tree", at=(14.5, Y0 - 12.5, 0), rot_z=2.1, scale=0.85)
-        append_asset("jacaranda_tree", at=(19.0, Y0 - 22.0, 0), rot_z=4.0, scale=1.1)
+    # jacarandas are placed below via linked instances — full copies OOM'd
     m_hedge = pbr("BackHedge", "grass_medium_01", scale=2.2, bump=0.9)
     _hb = m_hedge.node_tree.nodes["Principled BSDF"]
     for _k in ("Specular IOR Level", "Specular"):
@@ -427,7 +433,7 @@ def build():
     # mesh data) — full copies of tree meshes blew GPU memory
     _proto = {}
     if not _FAST:
-        for _sp in ("island_tree_02", "tree_small_02"):
+        for _sp in ("island_tree_02", "tree_small_02", "jacaranda_tree"):
             _proto[_sp] = append_asset(_sp, at=(0, Y0 - 60, -50))  # parked off-view
 
     def _tree_instance(_sp, _at, _rz, _sc):
@@ -453,6 +459,10 @@ def build():
         _tree_instance(_sp, (_tx, _ty, -0.05), _erng.uniform(0, 6.28), _tsc)
     _tree_instance("tree_small_02", (-14.0, Y0 - 14.0, -0.03), 1.2, 0.9)
     _tree_instance("island_tree_02", (16.0, Y0 - 17.0, -0.03), 3.6, 0.8)
+    # hero jacarandas framing the view, clear of the sun corridor
+    _tree_instance("jacaranda_tree", (-16.5, Y0 - 10.0, 0), 0.0, 1.0)
+    _tree_instance("jacaranda_tree", (14.5, Y0 - 12.5, 0), 2.1, 0.85)
+    _tree_instance("jacaranda_tree", (19.0, Y0 - 22.0, 0), 4.0, 1.1)
 
     # ---------------- world: HDRI daylight ----------------
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
