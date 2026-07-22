@@ -36,9 +36,14 @@ OUT = arg("--out", "modeling/out/stills")
 VIEW = arg("--view", "both")
 SAMPLES = int(arg("--samples", "192"))
 PROBE = bool(arg("--probe", False))
+if bool(arg("--fast", False)):
+    SAMPLES = min(SAMPLES, 24)
 BRIGHT_ONLY = bool(arg("--bright-only", False))  # fast light-iteration probes
+FAST = bool(arg("--fast", False))  # layout-draft mode: tiny frame, few samples
+if FAST:
+    os.environ["ZT_FAST"] = "1"   # builders lighten heavy detail (hair grass)
 FILM_FLOOR = 0.14          # light fraction in the "filmed" state
-RES = (960, 600) if PROBE else (1680, 1050)
+RES = (640, 400) if FAST else (960, 600) if PROBE else (1680, 1050)
 
 
 def clear_scene():

@@ -293,6 +293,11 @@ def build():
     pset.root_radius = 0.018
     pset.material = 2
     pset.use_hair_bspline = True
+    import os as _os
+    if _os.environ.get("ZT_FAST"):
+        # layout-iteration mode: lawn detail is irrelevant, cut the hair cost
+        pset.count = 3500
+        pset.rendered_child_count = 2
     append_asset("planter_box_01", at=(-3.4, Y0 - 1.0, 0))
     append_asset("planter_box_01", at=(2.2, Y0 - 1.0, 0), rot_z=0.03)
     append_asset("jacaranda_tree", at=(-16.5, Y0 - 10.0, 0), scale=1.0)
