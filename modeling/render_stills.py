@@ -36,6 +36,7 @@ OUT = arg("--out", "modeling/out/stills")
 VIEW = arg("--view", "both")
 SAMPLES = int(arg("--samples", "192"))
 PROBE = bool(arg("--probe", False))
+BRIGHT_ONLY = bool(arg("--bright-only", False))  # fast light-iteration probes
 FILM_FLOOR = 0.14          # light fraction in the "filmed" state
 RES = (960, 600) if PROBE else (1680, 1050)
 
@@ -148,7 +149,7 @@ def main():
         sun.angle = math.radians(1.1)
         sun.color = (1.0, 0.95, 0.88)
         so = bpy.data.objects.new("Sun", sun)
-        so.rotation_euler = (math.radians(42), 0, math.radians(207))
+        so.rotation_euler = (math.radians(62), 0, math.radians(352))
         bpy.context.collection.objects.link(so)
         globals()["_SUN_BASE"] = sun.energy
     else:
@@ -162,6 +163,7 @@ def main():
     sc.render.engine = "CYCLES"
     sc.cycles.samples = SAMPLES
     sc.cycles.use_denoising = True
+    sc.cycles.texture_limit_render = "1024" if PROBE else "2048"  # VRAM guard
     try:
         sc.cycles.device = "GPU"
         prefs = bpy.context.preferences.addons["cycles"].preferences
@@ -176,6 +178,7 @@ def main():
     sc.render.image_settings.quality = 92
     sc.view_settings.view_transform = "Filmic"
     sc.view_settings.look = "Medium High Contrast"
+    sc.view_settings.exposure = 0.55   # interiors under a real roof need the lift
 
     os.makedirs(OUT, exist_ok=True)
     views = ["interior", "exterior"] if VIEW == "both" else [VIEW]
@@ -186,6 +189,8 @@ def main():
         sc.camera = cams[view]
         scale_light(world, sun, 1.0)
         render(os.path.join(OUT, f"{view}_bright.jpg"))
+        if BRIGHT_ONLY:
+            continue
         scale_light(world, sun, FILM_FLOOR)
         render(os.path.join(OUT, f"{view}_filmed.jpg"))
         scale_light(world, sun, 1.0)

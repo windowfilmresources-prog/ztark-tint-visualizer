@@ -16,7 +16,7 @@ import math
 import os
 
 SELF_WORLD = True
-SUN_ENERGY = 4.2
+SUN_ENERGY = 7.0
 
 A = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "assets", "polyhaven")
@@ -176,8 +176,15 @@ def build():
     # shell
     fl = plane("Floor", X0, X1, Y0, Y1, 0.0, m_floor)
     uv_box(fl, 1.0)
-    ce = plane("Ceiling", X0, X1, Y0, Y1, H, m_white)
-    ce.rotation_euler = (math.pi, 0, 0)
+    # real roof: white ceiling below, slab body, and an eave overhanging the
+    # glass so the building reads as a building (also throws a nice shadow
+    # band into the room's top edge)
+    box("RoofSlab", X0 - 0.35, X1 + 0.35, Y0 - 0.65, Y1 + 0.35, H, H + 0.28, m_white)
+    m_fascia = bpy.data.materials.new("RoofFascia")
+    m_fascia.use_nodes = True
+    m_fascia.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.07, 0.072, 0.075, 1)
+    m_fascia.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.5
+    box("Roof_FasciaF", X0 - 0.35, X1 + 0.35, Y0 - 0.65, Y0 - 0.57, H - 0.02, H + 0.28, m_fascia)
     for nm, x0b, x1b, y0b, y1b in (
         ("Wall_E", X1, X1 + 0.15, Y0 - 0.15, Y1 + 0.15),
         ("Wall_W", X0 - 0.15, X0, Y0 - 0.15, Y1 + 0.15),
@@ -277,20 +284,20 @@ def build():
     psm = near.modifiers.new("grass", 'PARTICLE_SYSTEM')
     pset = near.particle_systems[0].settings
     pset.type = 'HAIR'
-    pset.count = 22000
+    pset.count = 14000
     pset.hair_length = 0.11
     pset.length_random = 0.55
     pset.child_type = 'INTERPOLATED'
-    pset.rendered_child_count = 14
+    pset.rendered_child_count = 8
     pset.child_length = 0.85
     pset.root_radius = 0.018
     pset.material = 2
     pset.use_hair_bspline = True
     append_asset("planter_box_01", at=(-3.4, Y0 - 1.0, 0))
     append_asset("planter_box_01", at=(2.2, Y0 - 1.0, 0), rot_z=0.03)
-    append_asset("jacaranda_tree", at=(-5.5, Y0 - 7.5, 0), scale=1.0)
-    append_asset("jacaranda_tree", at=(5.0, Y0 - 10.0, 0), rot_z=2.1, scale=0.85)
-    append_asset("jacaranda_tree", at=(-0.5, Y0 - 14.0, 0), rot_z=4.0, scale=1.1)
+    append_asset("jacaranda_tree", at=(-16.5, Y0 - 10.0, 0), scale=1.0)
+    append_asset("jacaranda_tree", at=(14.5, Y0 - 12.5, 0), rot_z=2.1, scale=0.85)
+    append_asset("jacaranda_tree", at=(19.0, Y0 - 22.0, 0), rot_z=4.0, scale=1.1)
     m_hedge = pbr("BackHedge", "grass_medium_01", scale=2.2, bump=0.9)
     _hb = m_hedge.node_tree.nodes["Principled BSDF"]
     for _k in ("Specular IOR Level", "Specular"):
@@ -309,6 +316,76 @@ def build():
     wb.inputs["Base Color"].default_value = (0.18, 0.55, 0.6, 1)
     wb.inputs["Roughness"].default_value = 0.03
     # (pool omitted from this camera — clean lawn composition)
+
+    # ---------------- environment fill: hills + treeline ----------------
+    import random as _rnd
+    _erng = _rnd.Random(42)
+    # extend the flat lawn further back so the treeline stands on grass
+    # (the near yard plane already covers to Y0-30)
+    # rolling hills backdrop: displaced grid rising behind the treeline
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=72, y_subdivisions=72, size=1)
+    hills = bpy.context.active_object
+    hills.name = "Hills"
+    hills.scale = (340, 200, 1)
+    hills.location = (0, Y0 - 130, -1.2)
+    bpy.ops.object.transform_apply(scale=True)
+    htex = bpy.data.textures.get("HillNoise")
+    if htex is None:
+        htex = bpy.data.textures.new("HillNoise", type='CLOUDS')
+        htex.noise_scale = 55.0
+    hmod = hills.modifiers.new('hdisp', 'DISPLACE')
+    hmod.texture = htex
+    hmod.strength = 22.0
+    hmod.mid_level = 0.42
+    bpy.ops.object.select_all(action='DESELECT')
+    hills.select_set(True)
+    bpy.context.view_layer.objects.active = hills
+    bpy.ops.object.modifier_apply(modifier=hmod.name)
+    bpy.ops.object.shade_smooth()
+    m_hills = pbr("HillGrass", "grass_medium_01", scale=30.0, bump=0.3)
+    _hlb = m_hills.node_tree.nodes["Principled BSDF"]
+    for _k in ("Specular IOR Level", "Specular"):
+        if _k in _hlb.inputs:
+            _hlb.inputs[_k].default_value = 0.04
+            break
+    for _l in list(_hlb.inputs["Roughness"].links):
+        m_hills.node_tree.links.remove(_l)
+    _hlb.inputs["Roughness"].default_value = 1.0
+    _hsat = m_hills.node_tree.nodes.new("ShaderNodeHueSaturation")
+    _hsat.inputs["Saturation"].default_value = 1.35
+    _hal = m_hills.node_tree.nodes["AlbedoLift"]
+    m_hills.node_tree.links.new(_hal.outputs["Color"], _hsat.inputs["Color"])
+    m_hills.node_tree.links.new(_hsat.outputs["Color"], _hlb.inputs["Base Color"])
+    hills.data.materials.append(m_hills)
+    uv_box(hills, 1.0)
+
+    # treeline: each species appended ONCE, then linked duplicates (shared
+    # mesh data) — full copies of tree meshes blew GPU memory
+    _proto = {}
+    for _sp in ("island_tree_02", "tree_small_02"):
+        _proto[_sp] = append_asset(_sp, at=(0, Y0 - 60, -50))  # parked off-view
+
+    def _tree_instance(_sp, _at, _rz, _sc):
+        _root = _proto[_sp]
+        _nr = bpy.data.objects.new(_root.name + "_i", None)
+        bpy.context.collection.objects.link(_nr)
+        for _ch in _root.children:
+            _c = _ch.copy()                  # linked duplicate: shares mesh
+            bpy.context.collection.objects.link(_c)
+            _c.parent = _nr
+        _nr.location = _at
+        _nr.rotation_euler = (0, 0, _rz)
+        _nr.scale = (_sc, _sc, _sc)
+
+    _species = ["island_tree_02", "tree_small_02"]
+    for _ti in range(9):
+        _sp = _species[_ti % len(_species)]
+        _tx = _erng.uniform(X0 - 18, X1 + 18)
+        _ty = Y0 - _erng.uniform(17.5, 26.0)
+        _tsc = _erng.uniform(0.8, 1.4)
+        _tree_instance(_sp, (_tx, _ty, -0.05), _erng.uniform(0, 6.28), _tsc)
+    _tree_instance("tree_small_02", (-14.0, Y0 - 14.0, -0.03), 1.2, 0.9)
+    _tree_instance("island_tree_02", (16.0, Y0 - 17.0, -0.03), 3.6, 0.8)
 
     # ---------------- world: HDRI daylight ----------------
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
