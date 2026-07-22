@@ -99,6 +99,11 @@ def scale_light(world, sun, f):
     if bg:
         base_bg = globals().setdefault("_BG_BASE", bg.inputs["Strength"].default_value)
         bg.inputs["Strength"].default_value = base_bg * (0.3 + 0.7 * f)
+    # interior fill lights represent bounced daylight — they dim with the film
+    fill = bpy.data.lights.get("FillArea")
+    if fill:
+        base_fill = globals().setdefault("_FILL_BASE", fill.energy)
+        fill.energy = base_fill * (0.15 + 0.85 * f)
 
 
 def mark_glass_index():
@@ -168,7 +173,7 @@ def main():
     sc.render.engine = "CYCLES"
     sc.cycles.samples = SAMPLES
     sc.cycles.use_denoising = True
-    sc.cycles.texture_limit_render = "1024" if PROBE else "2048"  # VRAM guard
+    sc.cycles.texture_limit_render = "512" if FAST else "1024" if PROBE else "2048"  # VRAM guard
     try:
         sc.cycles.device = "GPU"
         prefs = bpy.context.preferences.addons["cycles"].preferences

@@ -232,22 +232,79 @@ def build():
         sol.thickness = 0.008
         cu.data.materials.append(m_linen)
 
-    # rug under the seating group
-    rug = box("Rug", -2.5, 0.9, -1.5, 1.4, 0.0, 0.012, m_rug)
+    # rug under the seating group — large, anchors the whole conversation area
+    rug = box("Rug", -2.7, 1.8, -1.9, 1.7, 0.0, 0.012, m_rug)
     uv_box(rug, 2.5)
 
     # ---------------- furniture (PolyHaven, CC0) ----------------
-    append_asset("sofa_03", at=(-1.0, 1.15, 0), rot_z=math.pi)       # back to room, faces glass
-    append_asset("ArmChair_01", at=(1.35, -0.1, 0), rot_z=math.radians(-125))
-    append_asset("coffee_table_round_01", at=(-0.85, -0.45, 0))
-    append_asset("ceramic_vase_03", at=(-0.55, -0.5, 0.5), scale=0.7)
-    append_asset("side_table_01", at=(-2.75, 0.4, 0), rot_z=0.3)
-    append_asset("brass_vase_03", at=(-2.75, 0.4, 0.52))
-    append_asset("potted_plant_01", at=(3.5, -2.0, 0), rot_z=0.7)
-    append_asset("modern_ceiling_lamp_01", at=(-0.9, -0.3, H))
-    append_asset("dining_table", at=(-3.1, 1.9, 0), rot_z=math.pi / 2, scale=0.95)
-    append_asset("dining_chair_02", at=(-2.45, 1.55, 0), rot_z=math.radians(160))
-    append_asset("dining_chair_02", at=(-2.5, 2.35, 0), rot_z=math.radians(20))
+    # conversation group centered on the view: sofa faces the glass, two
+    # armchairs angled in from the sides, round table in the middle
+    # procedural modern sofa — boxy modular form, the style PolyHaven lacks
+    m_boucle = bpy.data.materials.new("SofaBoucle")
+    m_boucle.use_nodes = True
+    _sb = m_boucle.node_tree.nodes["Principled BSDF"]
+    _sb.inputs["Base Color"].default_value = (0.36, 0.33, 0.28, 1)  # warm greige (linear)
+    _sb.inputs["Roughness"].default_value = 0.95
+    for _k in ("Specular IOR Level", "Specular"):
+        if _k in _sb.inputs:
+            _sb.inputs[_k].default_value = 0.05
+            break
+    m_plinth = bpy.data.materials.new("SofaPlinth")
+    m_plinth.use_nodes = True
+    m_plinth.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.045, 0.04, 0.035, 1)
+
+    def soft_box(name, cx, cy, w, d, z0, h, mat, bevel=0.05, rz=0.0):
+        bpy.ops.mesh.primitive_cube_add(location=(cx, cy, z0 + h / 2))
+        ob = bpy.context.active_object
+        ob.name = name
+        ob.scale = (w / 2, d / 2, h / 2)
+        ob.rotation_euler = (0, 0, rz)
+        bpy.ops.object.transform_apply(scale=True)
+        bv = ob.modifiers.new("bv", "BEVEL")
+        bv.width = bevel
+        bv.segments = 4
+        ob.data.materials.append(mat)
+        return ob
+
+    _sx, _sy = -0.5, 1.5   # sofa center, back near the rear wall, faces glass
+    soft_box("SofaPlinth", _sx, _sy, 2.5, 0.98, 0.0, 0.13, m_plinth, bevel=0.015)
+    soft_box("SofaSeatL", _sx - 0.6, _sy - 0.03, 1.16, 0.9, 0.13, 0.24, m_boucle, bevel=0.06)
+    soft_box("SofaSeatR", _sx + 0.6, _sy - 0.03, 1.16, 0.9, 0.13, 0.24, m_boucle, bevel=0.06)
+    soft_box("SofaBackL", _sx - 0.6, _sy + 0.33, 1.16, 0.3, 0.34, 0.46, m_boucle, bevel=0.07)
+    soft_box("SofaBackR", _sx + 0.6, _sy + 0.33, 1.16, 0.3, 0.34, 0.46, m_boucle, bevel=0.07)
+    soft_box("SofaArmL", _sx - 1.31, _sy + 0.02, 0.16, 0.94, 0.13, 0.42, m_boucle, bevel=0.05)
+    soft_box("SofaArmR", _sx + 1.31, _sy + 0.02, 0.16, 0.94, 0.13, 0.42, m_boucle, bevel=0.05)
+    m_throw = bpy.data.materials.new("ThrowRust")
+    m_throw.use_nodes = True
+    m_throw.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.30, 0.11, 0.05, 1)
+    m_throw.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.9
+    soft_box("Throw1", _sx - 0.75, _sy + 0.22, 0.42, 0.16, 0.37, 0.4, m_throw, bevel=0.07, rz=0.18)
+    soft_box("Throw2", _sx + 0.85, _sy + 0.22, 0.42, 0.16, 0.37, 0.4, m_boucle, bevel=0.07, rz=-0.12)
+
+    # modern seating + tables (PolyHaven)
+    append_asset("modern_arm_chair_01", at=(-2.0, -0.7, 0), rot_z=math.radians(-35))
+    append_asset("mid_century_lounge_chair", at=(1.85, -0.85, 0), rot_z=math.radians(-120))
+    append_asset("Ottoman_01", at=(1.15, -1.45, 0), rot_z=math.radians(15), scale=0.75)
+    append_asset("modern_coffee_table_01", at=(-0.3, 0.2, 0), rot_z=math.radians(90))
+    append_asset("ceramic_vase_03", at=(-0.1, 0.15, 0.46), scale=0.7)
+    append_asset("decorative_book_set_01", at=(-0.6, 0.3, 0.455), rot_z=0.4, scale=0.85)
+    # slatted-wood console + slim black frame on the +X wall
+    append_asset("modern_wooden_cabinet", at=(3.9, 0.35, 0), rot_z=math.radians(-90))
+    append_asset("brass_vase_03", at=(3.88, 0.15, 0.78))
+    append_asset("hanging_picture_frame_01", at=(4.16, 0.35, 1.7), rot_z=math.radians(-90), scale=1.6)
+    # greenery near the glass
+    append_asset("potted_plant_01", at=(3.5, -2.1, 0), rot_z=0.7)
+    append_asset("potted_plant_04", at=(-3.75, -2.25, 0), rot_z=2.1)
+    append_asset("modern_ceiling_lamp_01", at=(-0.4, 0.25, H))
+    # soft interior fill so furniture against the bright glass doesn't
+    # silhouette — standard archviz practice, kept subtle
+    _fd = bpy.data.lights.new("FillArea", type="AREA")
+    _fd.energy = 55
+    _fd.size = 3.2
+    _fd.color = (1.0, 0.95, 0.9)
+    _fo = bpy.data.objects.new("FillArea", _fd)
+    _fo.location = (-0.3, 1.2, H - 0.06)
+    bpy.context.collection.objects.link(_fo)
 
     # ---------------- outside: patio, planters, trees, pool ----------------
     pat = plane("Patio", X0 - 2, X1 + 2, Y0 - 2.1, Y0, -0.02, m_pavers)
@@ -300,9 +357,11 @@ def build():
         pset.rendered_child_count = 2
     append_asset("planter_box_01", at=(-3.4, Y0 - 1.0, 0))
     append_asset("planter_box_01", at=(2.2, Y0 - 1.0, 0), rot_z=0.03)
-    append_asset("jacaranda_tree", at=(-16.5, Y0 - 10.0, 0), scale=1.0)
-    append_asset("jacaranda_tree", at=(14.5, Y0 - 12.5, 0), rot_z=2.1, scale=0.85)
-    append_asset("jacaranda_tree", at=(19.0, Y0 - 22.0, 0), rot_z=4.0, scale=1.1)
+    _FAST = bool(__import__("os").environ.get("ZT_FAST"))  # layout-draft mode
+    if not _FAST:  # trees are the scene's memory hogs — drafts skip them
+        append_asset("jacaranda_tree", at=(-16.5, Y0 - 10.0, 0), scale=1.0)
+        append_asset("jacaranda_tree", at=(14.5, Y0 - 12.5, 0), rot_z=2.1, scale=0.85)
+        append_asset("jacaranda_tree", at=(19.0, Y0 - 22.0, 0), rot_z=4.0, scale=1.1)
     m_hedge = pbr("BackHedge", "grass_medium_01", scale=2.2, bump=0.9)
     _hb = m_hedge.node_tree.nodes["Principled BSDF"]
     for _k in ("Specular IOR Level", "Specular"):
@@ -367,10 +426,13 @@ def build():
     # treeline: each species appended ONCE, then linked duplicates (shared
     # mesh data) — full copies of tree meshes blew GPU memory
     _proto = {}
-    for _sp in ("island_tree_02", "tree_small_02"):
-        _proto[_sp] = append_asset(_sp, at=(0, Y0 - 60, -50))  # parked off-view
+    if not _FAST:
+        for _sp in ("island_tree_02", "tree_small_02"):
+            _proto[_sp] = append_asset(_sp, at=(0, Y0 - 60, -50))  # parked off-view
 
     def _tree_instance(_sp, _at, _rz, _sc):
+        if _FAST:
+            return
         _root = _proto[_sp]
         _nr = bpy.data.objects.new(_root.name + "_i", None)
         bpy.context.collection.objects.link(_nr)
@@ -416,8 +478,8 @@ def build():
 
     # ---------------- camera anchors ----------------
     cam = bpy.data.objects.new("InteriorCam", None)
-    cam.location = (3.45, 2.35, 1.5)
+    cam.location = (-3.75, 2.55, 1.5)
     bpy.context.collection.objects.link(cam)
     tgt = bpy.data.objects.new("InteriorTarget", None)
-    tgt.location = (-1.9, -4.3, 0.82)
+    tgt.location = (0.9, -2.8, 0.9)
     bpy.context.collection.objects.link(tgt)
