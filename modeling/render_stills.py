@@ -159,7 +159,8 @@ def main():
         sun.angle = math.radians(1.1)
         sun.color = (1.0, 0.95, 0.88)
         so = bpy.data.objects.new("Sun", sun)
-        so.rotation_euler = (math.radians(62), 0, math.radians(352))
+        _srot = getattr(builder, "SUN_ROT", (62, 0, 352))  # per-builder sun angle
+        so.rotation_euler = tuple(math.radians(a) for a in _srot)
         bpy.context.collection.objects.link(so)
         globals()["_SUN_BASE"] = sun.energy
     else:

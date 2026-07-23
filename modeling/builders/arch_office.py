@@ -16,7 +16,8 @@ import math
 import os
 
 SELF_WORLD = True
-SUN_ENERGY = 7.0
+SUN_ENERGY = 8.5
+SUN_ROT = (52, 0, 349)  # ~38 deg elevation: clears the skyline, still pools with mullion bars
 
 A = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "assets", "polyhaven")
@@ -234,6 +235,12 @@ def build():
         x = X0 + i * pw
         g = box(f"Glass_{i}", x + 0.03, x + pw - 0.03, yF - 0.006, yF + 0.006,
                 0.05, H - 0.12, m_glass)
+        # let direct sun pass through the pane cleanly. Cycles treats sharp
+        # sun refracted through transmissive glass as a caustic (not rendered
+        # by default), so the pane otherwise casts a shadow and kills the sun
+        # pool. Shadow-invisible glass = a real sunlit-window pool; the opaque
+        # mullions/head/sill still cast the window-bar shadows.
+        g.visible_shadow = False
 
 
     # ---------------- furniture (PolyHaven, CC0) ----------------
@@ -329,13 +336,16 @@ def build():
     # pendants over lounge table and counter (mesh authored above its origin)
     append_asset("modern_ceiling_lamp_01", at=(-3.0, -0.3, H - 1.17))
     append_asset("modern_ceiling_lamp_01", at=(2.75, 0.3, H - 1.17))
-    # interior fill scaled to the bigger volume; dims with the film
+    # subtle fill only — just enough to keep shadow sides from going black.
+    # A strong fill flattens the scene and ERASES the direct-sun shaft, which
+    # is exactly the glare the film demo needs to show cutting. Keep it low so
+    # the sun through the glass reads as a crisp, mullion-shadowed pool.
     _fd = bpy.data.lights.new("FillArea", type="AREA")
-    _fd.energy = 95
+    _fd.energy = 22
     _fd.size = 4.6
-    _fd.color = (1.0, 0.95, 0.9)
+    _fd.color = (0.9, 0.94, 1.0)  # cool fill so the warm sun pool pops
     _fo = bpy.data.objects.new("FillArea", _fd)
-    _fo.location = (-0.6, 0.9, H - 0.06)
+    _fo.location = (-3.5, 0.9, H - 0.06)  # over the shaded lounge side, away from the sun pool
     bpy.context.collection.objects.link(_fo)
 
     # ---------------- outside: high-rise city ----------------
@@ -460,28 +470,33 @@ def build():
     # not a looking-down-on-roofs view). One gap left of centre lets sky +
     # sun through so the room stays lit and it doesn't feel walled in.
     _ti = 0
-    # denser front row, tops varied but all tall enough to read as facades;
-    # small slivers of sky between them, one modest dip near x=2 for light
-    _front = [(-58, 60), (-42, 50), (-26, 66), (-10, 44), (2, 30),
-              (14, 62), (28, 52), (42, 72), (56, 46), (70, 58)]
-    for _x, _top in _front:
-        _w = _crng.uniform(11, 16)
-        _d = _crng.uniform(12, 16)
-        _tower(_ti, _x, -78 - _crng.uniform(0, 8), _w, _d, _top,
-               m_fac_a if _ti % 2 else m_fac_b)
-        _ti += 1
-    # mid row — still tall, filling gaps between the front towers
-    for _x in range(-96, 101, 26):
-        _tower(_ti, _x + _crng.uniform(-6, 6), -104 - _crng.uniform(0, 18),
-               _crng.uniform(15, 23), _crng.uniform(15, 21),
-               _crng.uniform(24, 64), m_fac_mid)
-        _ti += 1
-    # far skyline — hazy backdrop
-    for _x in range(-170, 171, 30):
-        _tower(_ti, _x + _crng.uniform(-8, 8), -180 - _crng.uniform(0, 30),
-               _crng.uniform(18, 30), _crng.uniform(18, 26),
-               _crng.uniform(12, 58), m_fac_far)
-        _ti += 1
+    if not __import__("os").environ.get("ZT_NOCITY"):  # diag: skip towers
+        # Front row tops kept in ~24-40m: tall enough that our 20th-floor camera
+        # looks UP at facades (roofs hidden), but low enough that the low sun
+        # (~28 deg, clears the row around 42m near centre) rakes OVER them into
+        # the room. The dip at x=-11 sits right in the sun corridor so a clean
+        # shaft lands on the floor — the glare the film demo needs to cut.
+        # Edges can spike taller (they don't block the central shaft).
+        _front = [(-58, 54), (-42, 34), (-26, 38), (-11, 22), (4, 36),
+                  (18, 39), (32, 32), (46, 40), (60, 33), (72, 50)]
+        for _x, _top in _front:
+            _w = _crng.uniform(11, 16)
+            _d = _crng.uniform(12, 16)
+            _tower(_ti, _x, -78 - _crng.uniform(0, 8), _w, _d, _top,
+                   m_fac_a if _ti % 2 else m_fac_b)
+            _ti += 1
+        # mid row — still tall, filling gaps between the front towers
+        for _x in range(-96, 101, 26):
+            _tower(_ti, _x + _crng.uniform(-6, 6), -104 - _crng.uniform(0, 18),
+                   _crng.uniform(15, 23), _crng.uniform(15, 21),
+                   _crng.uniform(24, 64), m_fac_mid)
+            _ti += 1
+        # far skyline — hazy backdrop
+        for _x in range(-170, 171, 30):
+            _tower(_ti, _x + _crng.uniform(-8, 8), -180 - _crng.uniform(0, 30),
+                   _crng.uniform(18, 30), _crng.uniform(18, 26),
+                   _crng.uniform(12, 58), m_fac_far)
+            _ti += 1
 
     # ---------------- world: HDRI daylight ----------------
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
@@ -500,7 +515,7 @@ def build():
     nt.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
     bg = nt.nodes.new("ShaderNodeBackground")
     bg.name = "Background"
-    bg.inputs["Strength"].default_value = 1.0
+    bg.inputs["Strength"].default_value = 0.72
     out = nt.nodes.new("ShaderNodeOutputWorld")
     nt.links.new(env.outputs["Color"], bg.inputs["Color"])
     nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
