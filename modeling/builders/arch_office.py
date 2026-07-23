@@ -175,8 +175,15 @@ def build():
         if key in gb.inputs:
             gb.inputs[key].default_value = 1.0
             break
+    # near-index glass so the pane barely reflects — at this grazing camera
+    # angle a real 1.45 IOR turned the glass into a mirror of the bright
+    # ceiling. A tint visualizer wants clean see-through, not room reflections.
     if "IOR" in gb.inputs:
-        gb.inputs["IOR"].default_value = 1.45
+        gb.inputs["IOR"].default_value = 1.05
+    for _sk in ("Specular IOR Level", "Specular"):
+        if _sk in gb.inputs:
+            gb.inputs[_sk].default_value = 0.06
+            break
 
     m_white = bpy.data.materials.new("TrimWhite")
     m_white.use_nodes = True
@@ -448,31 +455,32 @@ def build():
             y - _md/2, y + _md/2, top + 0.15, top + 1.4, m_roof)
         return b
 
-    # our own building's lower floors: a facade slab dropping to the street
-    _tower("Self", 0, Y0 - 6.0, X1 * 2 + 24, 12.0, -0.35, m_fac_a)
-
-    # front row across the street — centre towers stay below the sun path
+    # front row across the street — TALL: tops rise well above the window so
+    # we see facades, not rooftops (this is a high-rise-among-high-rises view,
+    # not a looking-down-on-roofs view). One gap left of centre lets sky +
+    # sun through so the room stays lit and it doesn't feel walled in.
     _ti = 0
-    for _x in (-52, -30, -12, 6, 24, 44, 64):
-        _w = _crng.uniform(12, 18)
+    # denser front row, tops varied but all tall enough to read as facades;
+    # small slivers of sky between them, one modest dip near x=2 for light
+    _front = [(-58, 60), (-42, 50), (-26, 66), (-10, 44), (2, 30),
+              (14, 62), (28, 52), (42, 72), (56, 46), (70, 58)]
+    for _x, _top in _front:
+        _w = _crng.uniform(11, 16)
         _d = _crng.uniform(12, 16)
-        _top = _crng.uniform(-32, 6) if -52 <= _x <= 30 else _crng.uniform(-18, 16)
-        _tower(_ti, _x, -76 - _crng.uniform(0, 10), _w, _d, _top,
+        _tower(_ti, _x, -78 - _crng.uniform(0, 8), _w, _d, _top,
                m_fac_a if _ti % 2 else m_fac_b)
         _ti += 1
-    _tower("HeroA", 34, -92, 15, 15, 32, m_fac_b)
-    _tower("HeroB", 70, -84, 18, 16, 20, m_fac_a)
-    # mid row
-    for _x in range(-100, 101, 24):
-        _tower(_ti, _x + _crng.uniform(-5, 5), -95 - _crng.uniform(0, 18),
-               _crng.uniform(14, 22), _crng.uniform(14, 20),
-               _crng.uniform(-20, 42), m_fac_mid)
+    # mid row — still tall, filling gaps between the front towers
+    for _x in range(-96, 101, 26):
+        _tower(_ti, _x + _crng.uniform(-6, 6), -104 - _crng.uniform(0, 18),
+               _crng.uniform(15, 23), _crng.uniform(15, 21),
+               _crng.uniform(24, 64), m_fac_mid)
         _ti += 1
-    # far skyline
-    for _x in range(-160, 161, 28):
-        _tower(_ti, _x + _crng.uniform(-8, 8), -165 - _crng.uniform(0, 30),
+    # far skyline — hazy backdrop
+    for _x in range(-170, 171, 30):
+        _tower(_ti, _x + _crng.uniform(-8, 8), -180 - _crng.uniform(0, 30),
                _crng.uniform(18, 30), _crng.uniform(18, 26),
-               _crng.uniform(-5, 46), m_fac_far)
+               _crng.uniform(12, 58), m_fac_far)
         _ti += 1
 
     # ---------------- world: HDRI daylight ----------------
