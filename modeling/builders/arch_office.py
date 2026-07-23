@@ -331,155 +331,131 @@ def build():
     _fo.location = (-0.6, 0.9, H - 0.06)
     bpy.context.collection.objects.link(_fo)
 
-    # ---------------- outside: patio, planters, trees, pool ----------------
-    pat = plane("Patio", X0 - 2, X1 + 2, Y0 - 2.1, Y0, -0.02, m_pavers)
-    uv_box(pat, 1.0)
-    # cedar planters on the patio, kept clear of the drape lines
-    append_asset("planter_box_01", at=(-2.1, Y0 - 1.25, 0), rot_z=0.04)
-    append_asset("planter_box_01", at=(2.3, Y0 - 1.1, 0), rot_z=-0.06)
-    m_lawn = pbr("YardLawn", "grass_medium_01", scale=9.0, bump=0.6)
-    # saturate the ground read; the hair grass on top carries the realism
-    _sat = m_lawn.node_tree.nodes.new("ShaderNodeHueSaturation")
-    _sat.inputs["Saturation"].default_value = 1.5
-    _al = m_lawn.node_tree.nodes["AlbedoLift"]
-    _pb = m_lawn.node_tree.nodes["Principled BSDF"]
-    m_lawn.node_tree.links.new(_al.outputs["Color"], _sat.inputs["Color"])
-    m_lawn.node_tree.links.new(_sat.outputs["Color"], _pb.inputs["Base Color"])
-    m_lawn.node_tree.nodes["AlbedoLift"].inputs["Bright"].default_value = 0.07
-    _lb = m_lawn.node_tree.nodes["Principled BSDF"]
-    for _k in ("Specular IOR Level", "Specular"):
-        if _k in _lb.inputs:
-            _lb.inputs[_k].default_value = 0.04   # grass has no glancing sheen
-            break
-    for _l in list(_lb.inputs["Roughness"].links):
-        m_lawn.node_tree.links.remove(_l)
-    _lb.inputs["Roughness"].default_value = 1.0
-    ground = plane("Yard", X0 - 20, X1 + 20, Y0 - 30, Y0 - 2.1, -0.03, m_lawn)
-    uv_box(ground, 1.0)
-    # real 3D lawn: hair-particle grass on the visible band (offline render
-    # can afford it — this is what sells "lawn" in archviz)
-    m_blade = bpy.data.materials.new("LawnBlades")
-    m_blade.use_nodes = True
-    bb = m_blade.node_tree.nodes["Principled BSDF"]
-    bb.inputs["Base Color"].default_value = (0.11, 0.28, 0.045, 1)
-    bb.inputs["Roughness"].default_value = 0.7
-    near = plane("YardNear", X0 - 12, X1 + 12, Y0 - 13.5, Y0 - 2.1, -0.028, m_lawn)
-    uv_box(near, 1.0)
-    near.data.materials.append(m_blade)
-    psm = near.modifiers.new("grass", 'PARTICLE_SYSTEM')
-    pset = near.particle_systems[0].settings
-    pset.type = 'HAIR'
-    pset.count = 14000
-    pset.hair_length = 0.11
-    pset.length_random = 0.55
-    pset.child_type = 'INTERPOLATED'
-    pset.rendered_child_count = 8
-    pset.child_length = 0.85
-    pset.root_radius = 0.018
-    pset.material = 2
-    pset.use_hair_bspline = True
-    import os as _os
-    if _os.environ.get("ZT_FAST"):
-        # layout-iteration mode: lawn detail is irrelevant, cut the hair cost
-        pset.count = 3500
-        pset.rendered_child_count = 2
-    _FAST = bool(__import__("os").environ.get("ZT_FAST"))  # layout-draft mode
-    # jacarandas are placed below via linked instances — full copies OOM'd
-    m_hedge = pbr("BackHedge", "grass_medium_01", scale=2.2, bump=0.9)
-    _hb = m_hedge.node_tree.nodes["Principled BSDF"]
-    for _k in ("Specular IOR Level", "Specular"):
-        if _k in _hb.inputs:
-            _hb.inputs[_k].default_value = 0.04
-            break
-    hbb = box("Hedge_Back", X0 - 16, X1 + 16, Y0 - 16.6, Y0 - 15.8, -0.03, 1.6, m_hedge)
-    uv_box(hbb, 1.0)
-    # pool: coping + water
-    m_cope = bpy.data.materials.new("PoolCoping")
-    m_cope.use_nodes = True
-    m_cope.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.55, 0.52, 0.47, 1)
-    m_water = bpy.data.materials.new("PoolWater")
-    m_water.use_nodes = True
-    wb = m_water.node_tree.nodes["Principled BSDF"]
-    wb.inputs["Base Color"].default_value = (0.18, 0.55, 0.6, 1)
-    wb.inputs["Roughness"].default_value = 0.03
-    # (pool omitted from this camera — clean lawn composition)
+    # ---------------- outside: high-rise city ----------------
+    # The room is a ~20th-floor suite: street canyon 80m below, rows of
+    # procedural towers with window-grid facades. Far rows get lighter,
+    # bluer materials — painter's atmospheric haze without volumetrics.
+    import random as _random
+    _crng = _random.Random(77)
+    GROUND = -80.0
 
-    # ---------------- environment fill: hills + treeline ----------------
-    import random as _rnd
-    _erng = _rnd.Random(42)
-    # extend the flat lawn further back so the treeline stands on grass
-    # (the near yard plane already covers to Y0-30)
-    # rolling hills backdrop: displaced grid rising behind the treeline
-    bpy.ops.mesh.primitive_grid_add(x_subdivisions=72, y_subdivisions=72, size=1)
-    hills = bpy.context.active_object
-    hills.name = "Hills"
-    hills.scale = (340, 200, 1)
-    hills.location = (0, Y0 - 130, -1.2)
-    bpy.ops.object.transform_apply(scale=True)
-    htex = bpy.data.textures.get("HillNoise")
-    if htex is None:
-        htex = bpy.data.textures.new("HillNoise", type='CLOUDS')
-        htex.noise_scale = 55.0
-    hmod = hills.modifiers.new('hdisp', 'DISPLACE')
-    hmod.texture = htex
-    hmod.strength = 22.0
-    hmod.mid_level = 0.42
-    bpy.ops.object.select_all(action='DESELECT')
-    hills.select_set(True)
-    bpy.context.view_layer.objects.active = hills
-    bpy.ops.object.modifier_apply(modifier=hmod.name)
-    bpy.ops.object.shade_smooth()
-    m_hills = pbr("HillGrass", "grass_medium_01", scale=30.0, bump=0.3)
-    _hlb = m_hills.node_tree.nodes["Principled BSDF"]
-    for _k in ("Specular IOR Level", "Specular"):
-        if _k in _hlb.inputs:
-            _hlb.inputs[_k].default_value = 0.04
-            break
-    for _l in list(_hlb.inputs["Roughness"].links):
-        m_hills.node_tree.links.remove(_l)
-    _hlb.inputs["Roughness"].default_value = 1.0
-    _hsat = m_hills.node_tree.nodes.new("ShaderNodeHueSaturation")
-    _hsat.inputs["Saturation"].default_value = 1.35
-    _hal = m_hills.node_tree.nodes["AlbedoLift"]
-    m_hills.node_tree.links.new(_hal.outputs["Color"], _hsat.inputs["Color"])
-    m_hills.node_tree.links.new(_hsat.outputs["Color"], _hlb.inputs["Base Color"])
-    hills.data.materials.append(m_hills)
-    uv_box(hills, 1.0)
+    def _facade(name, frame_col, glass_col, haze=0.0):
+        # window grid via modulo masks: ~2m bays, 3m floors — dark glass
+        # cells in concrete frames; haze lifts distant rows toward sky
+        m = bpy.data.materials.new(name)
+        m.use_nodes = True
+        nt = m.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        coord = nt.nodes.new("ShaderNodeTexCoord")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(coord.outputs["Object"], sep.inputs["Vector"])
 
-    # treeline: each species appended ONCE, then linked duplicates (shared
-    # mesh data) — full copies of tree meshes blew GPU memory
-    _proto = {}
-    if not _FAST:
-        for _sp in ("island_tree_02", "tree_small_02", "jacaranda_tree"):
-            _proto[_sp] = append_asset(_sp, at=(0, Y0 - 60, -50))  # parked off-view
+        def stripe(axis_out, period, frac_window):
+            # Blender MODULO truncates: negative coords give negative
+            # remainders and the window test always fails — shift positive
+            off = nt.nodes.new("ShaderNodeMath")
+            off.operation = "ADD"
+            off.inputs[1].default_value = 1000.0
+            nt.links.new(axis_out, off.inputs[0])
+            mod = nt.nodes.new("ShaderNodeMath")
+            mod.operation = "MODULO"
+            mod.inputs[1].default_value = period
+            nt.links.new(off.outputs["Value"], mod.inputs[0])
+            gt = nt.nodes.new("ShaderNodeMath")
+            gt.operation = "GREATER_THAN"
+            gt.inputs[1].default_value = period * (1 - frac_window)
+            nt.links.new(mod.outputs["Value"], gt.inputs[0])
+            return gt
 
-    def _tree_instance(_sp, _at, _rz, _sc):
-        if _FAST:
-            return
-        _root = _proto[_sp]
-        _nr = bpy.data.objects.new(_root.name + "_i", None)
-        bpy.context.collection.objects.link(_nr)
-        for _ch in _root.children:
-            _c = _ch.copy()                  # linked duplicate: shares mesh
-            bpy.context.collection.objects.link(_c)
-            _c.parent = _nr
-        _nr.location = _at
-        _nr.rotation_euler = (0, 0, _rz)
-        _nr.scale = (_sc, _sc, _sc)
+        # stripe on (x+y): varies on every vertical face of an axis-aligned
+        # box (the constant axis only shifts phase) — max(gx,gy) degenerated
+        # on side faces whenever the constant axis landed in a window zone
+        gadd = nt.nodes.new("ShaderNodeMath")
+        gadd.operation = "ADD"
+        nt.links.new(sep.outputs["X"], gadd.inputs[0])
+        nt.links.new(sep.outputs["Y"], gadd.inputs[1])
+        gxy = stripe(gadd.outputs["Value"], 2.0, 0.78)
+        gz = stripe(sep.outputs["Z"], 3.0, 0.72)
+        win = nt.nodes.new("ShaderNodeMath")
+        win.operation = "MULTIPLY"
+        nt.links.new(gxy.outputs["Value"], win.inputs[0])
+        nt.links.new(gz.outputs["Value"], win.inputs[1])
 
-    _species = ["island_tree_02", "tree_small_02"]
-    for _ti in range(9):
-        _sp = _species[_ti % len(_species)]
-        _tx = _erng.uniform(X0 - 18, X1 + 18)
-        _ty = Y0 - _erng.uniform(17.5, 26.0)
-        _tsc = _erng.uniform(0.8, 1.4)
-        _tree_instance(_sp, (_tx, _ty, -0.05), _erng.uniform(0, 6.28), _tsc)
-    _tree_instance("tree_small_02", (-14.0, Y0 - 14.0, -0.03), 1.2, 0.9)
-    _tree_instance("island_tree_02", (16.0, Y0 - 17.0, -0.03), 3.6, 0.8)
-    # hero jacarandas framing the view, clear of the sun corridor
-    _tree_instance("jacaranda_tree", (-16.5, Y0 - 10.0, 0), 0.0, 1.0)
-    _tree_instance("jacaranda_tree", (14.5, Y0 - 12.5, 0), 2.1, 0.85)
-    _tree_instance("jacaranda_tree", (19.0, Y0 - 22.0, 0), 4.0, 1.1)
+        mixc = nt.nodes.new("ShaderNodeMixRGB")
+        mixc.inputs["Color1"].default_value = frame_col
+        mixc.inputs["Color2"].default_value = glass_col
+        nt.links.new(win.outputs["Value"], mixc.inputs["Fac"])
+        if haze > 0:
+            hz = nt.nodes.new("ShaderNodeMixRGB")
+            hz.inputs["Fac"].default_value = haze
+            hz.inputs["Color2"].default_value = (0.52, 0.60, 0.72, 1)
+            nt.links.new(mixc.outputs["Color"], hz.inputs["Color1"])
+            nt.links.new(hz.outputs["Color"], bsdf.inputs["Base Color"])
+        else:
+            nt.links.new(mixc.outputs["Color"], bsdf.inputs["Base Color"])
+        mixr = nt.nodes.new("ShaderNodeMixRGB")
+        mixr.inputs["Color1"].default_value = (0.7, 0.7, 0.7, 1)
+        mixr.inputs["Color2"].default_value = (0.3, 0.3, 0.3, 1)
+        nt.links.new(win.outputs["Value"], mixr.inputs["Fac"])
+        nt.links.new(mixr.outputs["Color"], bsdf.inputs["Roughness"])
+        return m
+
+    m_fac_a = _facade("FacadeConcrete", (0.24, 0.23, 0.21, 1), (0.030, 0.045, 0.065, 1))
+    m_fac_b = _facade("FacadeBlue", (0.09, 0.095, 0.10, 1), (0.045, 0.075, 0.11, 1))
+    m_fac_mid = _facade("FacadeMid", (0.26, 0.27, 0.29, 1), (0.06, 0.09, 0.13, 1), haze=0.3)
+    m_fac_far = _facade("FacadeFar", (0.30, 0.33, 0.38, 1), (0.14, 0.18, 0.24, 1), haze=0.6)
+
+    m_asphalt = bpy.data.materials.new("Asphalt")
+    m_asphalt.use_nodes = True
+    m_asphalt.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.035, 0.035, 0.037, 1)
+    m_asphalt.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.9
+    m_walk = bpy.data.materials.new("Sidewalk")
+    m_walk.use_nodes = True
+    m_walk.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.22, 0.215, 0.20, 1)
+    m_lane = bpy.data.materials.new("LanePaint")
+    m_lane.use_nodes = True
+    m_lane.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.55, 0.53, 0.42, 1)
+
+    # street canyon directly below the glass
+    plane("Street", -160, 160, -42, -12, GROUND, m_asphalt)
+    plane("WalkNear", -160, 160, -12, -4, GROUND + 0.12, m_walk)
+    plane("WalkFar", -160, 160, -50, -42, GROUND + 0.12, m_walk)
+    for _lx in range(-30, 31, 4):  # dashed centre line
+        box(f"Lane{_lx}", _lx * 4 - 1.1, _lx * 4 + 1.1, -27.6, -26.9,
+            GROUND + 0.13, GROUND + 0.14, m_lane)
+
+    def _tower(i, x, y, w, d, top, mat):
+        b = box(f"Tower{i}", x - w / 2, x + w / 2, y - d / 2, y + d / 2,
+                GROUND, top, mat)
+        uv_box(b, 1.0)
+        return b
+
+    # our own building's lower floors: a facade slab dropping to the street
+    _tower("Self", 0, Y0 - 6.0, X1 * 2 + 24, 12.0, -0.35, m_fac_a)
+
+    # front row across the street — centre towers stay below the sun path
+    _ti = 0
+    for _x in (-52, -30, -12, 6, 24, 44, 64):
+        _w = _crng.uniform(12, 18)
+        _d = _crng.uniform(12, 16)
+        _top = _crng.uniform(-32, 6) if -52 <= _x <= 30 else _crng.uniform(-18, 16)
+        _tower(_ti, _x, -76 - _crng.uniform(0, 10), _w, _d, _top,
+               m_fac_a if _ti % 2 else m_fac_b)
+        _ti += 1
+    _tower("HeroA", 34, -92, 15, 15, 32, m_fac_b)
+    _tower("HeroB", 70, -84, 18, 16, 20, m_fac_a)
+    # mid row
+    for _x in range(-100, 101, 24):
+        _tower(_ti, _x + _crng.uniform(-5, 5), -95 - _crng.uniform(0, 18),
+               _crng.uniform(14, 22), _crng.uniform(14, 20),
+               _crng.uniform(-20, 42), m_fac_mid)
+        _ti += 1
+    # far skyline
+    for _x in range(-160, 161, 28):
+        _tower(_ti, _x + _crng.uniform(-8, 8), -165 - _crng.uniform(0, 30),
+               _crng.uniform(18, 30), _crng.uniform(18, 26),
+               _crng.uniform(0, 75), m_fac_far)
+        _ti += 1
 
     # ---------------- world: HDRI daylight ----------------
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
@@ -508,5 +484,5 @@ def build():
     cam.location = (-5.05, 2.45, 1.62)
     bpy.context.collection.objects.link(cam)
     tgt = bpy.data.objects.new("InteriorTarget", None)
-    tgt.location = (2.2, -3.1, 1.0)
+    tgt.location = (2.0, -3.2, 0.5)
     bpy.context.collection.objects.link(tgt)
