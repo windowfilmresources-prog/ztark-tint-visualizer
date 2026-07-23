@@ -388,7 +388,7 @@ def build():
         if haze > 0:
             hz = nt.nodes.new("ShaderNodeMixRGB")
             hz.inputs["Fac"].default_value = haze
-            hz.inputs["Color2"].default_value = (0.52, 0.60, 0.72, 1)
+            hz.inputs["Color2"].default_value = (0.34, 0.42, 0.55, 1)
             nt.links.new(mixc.outputs["Color"], hz.inputs["Color1"])
             nt.links.new(hz.outputs["Color"], bsdf.inputs["Base Color"])
         else:
@@ -402,8 +402,8 @@ def build():
 
     m_fac_a = _facade("FacadeConcrete", (0.24, 0.23, 0.21, 1), (0.030, 0.045, 0.065, 1))
     m_fac_b = _facade("FacadeBlue", (0.09, 0.095, 0.10, 1), (0.045, 0.075, 0.11, 1))
-    m_fac_mid = _facade("FacadeMid", (0.26, 0.27, 0.29, 1), (0.06, 0.09, 0.13, 1), haze=0.3)
-    m_fac_far = _facade("FacadeFar", (0.30, 0.33, 0.38, 1), (0.14, 0.18, 0.24, 1), haze=0.6)
+    m_fac_mid = _facade("FacadeMid", (0.26, 0.27, 0.29, 1), (0.06, 0.09, 0.13, 1), haze=0.18)
+    m_fac_far = _facade("FacadeFar", (0.26, 0.29, 0.34, 1), (0.10, 0.14, 0.20, 1), haze=0.4)
 
     m_asphalt = bpy.data.materials.new("Asphalt")
     m_asphalt.use_nodes = True
@@ -424,10 +424,28 @@ def build():
         box(f"Lane{_lx}", _lx * 4 - 1.1, _lx * 4 + 1.1, -27.6, -26.9,
             GROUND + 0.13, GROUND + 0.14, m_lane)
 
+    m_roof = bpy.data.materials.new("RoofDeck")
+    m_roof.use_nodes = True
+    m_roof.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.045, 0.046, 0.05, 1)
+    m_roof.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.85
+
     def _tower(i, x, y, w, d, top, mat):
         b = box(f"Tower{i}", x - w / 2, x + w / 2, y - d / 2, y + d / 2,
                 GROUND, top, mat)
         uv_box(b, 1.0)
+        # roofs are viewed from above (our suite is up high) — a blank bright
+        # roof reads as a white box, so cap with a dark deck + parapet + a
+        # small mechanical unit
+        box(f"Roof{i}", x - w / 2, x + w / 2, y - d / 2, y + d / 2,
+            top, top + 0.15, m_roof)
+        pr = 0.35
+        box(f"Parapet{i}N", x - w/2, x + w/2, y + d/2 - 0.25, y + d/2, top, top + 0.7, m_roof)
+        box(f"Parapet{i}S", x - w/2, x + w/2, y - d/2, y - d/2 + 0.25, top, top + 0.7, m_roof)
+        box(f"Parapet{i}E", x + w/2 - 0.25, x + w/2, y - d/2, y + d/2, top, top + 0.7, m_roof)
+        box(f"Parapet{i}W", x - w/2, x - w/2 + 0.25, y - d/2, y + d/2, top, top + 0.7, m_roof)
+        _mw, _md = w * 0.32, d * 0.32
+        box(f"Mech{i}", x - _mw/2 + w*0.12, x + _mw/2 + w*0.12,
+            y - _md/2, y + _md/2, top + 0.15, top + 1.4, m_roof)
         return b
 
     # our own building's lower floors: a facade slab dropping to the street
@@ -454,7 +472,7 @@ def build():
     for _x in range(-160, 161, 28):
         _tower(_ti, _x + _crng.uniform(-8, 8), -165 - _crng.uniform(0, 30),
                _crng.uniform(18, 30), _crng.uniform(18, 26),
-               _crng.uniform(0, 75), m_fac_far)
+               _crng.uniform(-5, 46), m_fac_far)
         _ti += 1
 
     # ---------------- world: HDRI daylight ----------------
