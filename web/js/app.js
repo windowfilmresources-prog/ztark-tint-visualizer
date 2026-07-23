@@ -132,7 +132,7 @@
     computeModes();
     // photo-mode building scenes don't need WebGL — only kick back to
     // vehicles if the current space would have required the 3D diorama
-    if (S.space !== "vehicles" && !(BSCENES[S.space] && (BSCENES[S.space].stills || BSCENES[S.space].photo))) enterSpace("vehicles");
+    if (S.space !== "vehicles" && !(BSCENES[S.space] && (BSCENES[S.space].tiers || BSCENES[S.space].stills || BSCENES[S.space].photo))) enterSpace("vehicles");
     S.vehicle = FLEET2D[0].id;
     renderStageTools();
     renderVehicle();
@@ -166,7 +166,7 @@
 
   function renderBuilding() {
     const scene = BSCENES[S.space];
-    const flat = scene.stills || scene.photo;  // rendered stills preferred
+    const flat = scene.tiers || scene.stills || scene.photo;  // rendered tiers preferred
     if (flat) {
       // flat mode: a rendered interior (bright/filmed/mask trio) or a traced
       // photo — no 3D boot, instant, works everywhere. Film blends the room
@@ -176,7 +176,8 @@
         <div class="stage-hint" id="stageHint">Pick a film to see the glare cut and the room calm</div>
         <div class="photo-credit">${flat.credit || ""}</div>`;
       window.PHOTOVIZ.mount(document.getElementById("photoviz"));
-      const cfg = scene.stills ? { stills: scene.stills, credit: flat.credit } : scene.photo;
+      const cfg = scene.tiers ? { tiers: scene.tiers, credit: flat.credit }
+        : scene.stills ? { stills: scene.stills, credit: flat.credit } : scene.photo;
       window.PHOTOVIZ.load(cfg).then(() => window.PHOTOVIZ.setFilm(bFilm()));
       renderBadge();
       return;
@@ -209,7 +210,7 @@
 
   function updateBuildingFilm() {
     const scene = BSCENES[S.space];
-    if (scene && (scene.stills || scene.photo) && window.PHOTOVIZ && window.PHOTOVIZ.active) {
+    if (scene && (scene.tiers || scene.stills || scene.photo) && window.PHOTOVIZ && window.PHOTOVIZ.active) {
       window.PHOTOVIZ.setFilm(S.comparing ? null : bFilm());
     } else if (window.VIEWER3D) {
       window.VIEWER3D.setBuildingFilm(S.comparing ? null : bFilm());
@@ -435,7 +436,7 @@
 
   function renderSpaceTabs() {
     let el = $("spaceTabs");
-    const photoSpaces = Object.values(BSCENES).some((s) => s.stills || s.photo);
+    const photoSpaces = Object.values(BSCENES).some((s) => s.tiers || s.stills || s.photo);
     if (!BCAT || (!MODE_3D && !photoSpaces)) { if (el) el.parentElement.style.display = "none"; return; }
     if (!el) {
       const group = document.createElement("div");
@@ -459,7 +460,7 @@
   function renderViewTabs(show) {
     let el = $("viewTabs");
     // photo mode has a single fixed view — no Exterior/Interior toggle
-    if (show && S.space !== "vehicles" && BSCENES[S.space] && (BSCENES[S.space].stills || BSCENES[S.space].photo)) show = false;
+    if (show && S.space !== "vehicles" && BSCENES[S.space] && (BSCENES[S.space].tiers || BSCENES[S.space].stills || BSCENES[S.space].photo)) show = false;
     if (!show) { if (el) el.parentElement.style.display = "none"; return; }
     if (!el) {
       const group = document.createElement("div");

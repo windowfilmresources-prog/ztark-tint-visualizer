@@ -55,7 +55,20 @@ window.PHOTOVIZ = (function () {
   async function load(cfg) {
     state.loaded = false;
     state.credit = cfg.credit || "";
-    if (cfg.stills) {
+    if (cfg.tiers) {
+      // properly-rendered tint: each tier is the scene rendered with the glass
+      // actually carrying a film at that VLT (real transmission + relight).
+      // For a selected film we crossfade the two bracketing tiers; the mask
+      // adds only the film's warm tone / reflective sheen on top.
+      const { prefix, ver } = cfg.tiers;
+      const pad = (v) => String(v).padStart(3, "0");
+      const vlts = cfg.tiers.vlts.slice().sort((a, b) => b - a); // 100 -> 12
+      const imgs = await Promise.all(
+        vlts.map((v) => loadImg(`${prefix}_v${pad(v)}.jpg?v=${ver}`)));
+      state.tiers = vlts.map((v, i) => ({ vlt: v, img: imgs[i] }));
+      state.mask = await loadImg(`${prefix}_mask.png?v=${ver}`);
+      state.base = imgs[0]; state.mode = "tiers";
+    } else if (cfg.stills) {
       // rendered trio: bright (bare glass, full sun) + filmed (strong film)
       // + glass mask. The room RELIGHTS by blending bright->filmed per VLT
       // (light is additive, so this is a physically sound relight); the glass
@@ -133,6 +146,44 @@ window.PHOTOVIZ = (function () {
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, W, H);
+
+    if (state.mode === "tiers") {
+      // animate the effective VLT from bare (100) toward the film's VLT
+      const filmVlt = state.film ? state.film.vlt : 100;
+      const effVlt = 100 - (100 - filmVlt) * filmAmt;
+      const T = state.tiers;                 // sorted 100 -> 12
+      let hi = T[0], lo = T[T.length - 1];
+      if (effVlt >= T[0].vlt) { hi = lo = T[0]; }
+      else if (effVlt <= T[T.length - 1].vlt) { hi = lo = T[T.length - 1]; }
+      else {
+        for (let i = 0; i < T.length - 1; i++) {
+          if (effVlt <= T[i].vlt && effVlt >= T[i + 1].vlt) { hi = T[i]; lo = T[i + 1]; break; }
+        }
+      }
+      const span = hi.vlt - lo.vlt;
+      const t = span > 0 ? (hi.vlt - effVlt) / span : 0;  // 0 at hi img, 1 at lo img
+      ctx.globalAlpha = 1;
+      ctx.drawImage(hi.img, dx, dy, dw, dh);
+      if (t > 0.001 && lo !== hi) {
+        ctx.globalAlpha = t;
+        ctx.drawImage(lo.img, dx, dy, dw, dh);
+        ctx.globalAlpha = 1;
+      }
+      // film character on the glass view: warm tone + reflective sheen (light
+      // touch — the darkening/view is already properly rendered in the tiers)
+      if (state.film && filmAmt > 0.001) {
+        if (state.film.tone === "warm") {
+          const gc = Math.round(255 * (1 - 0.12 * filmAmt));
+          const bc = Math.round(255 * (1 - 0.26 * filmAmt));
+          paintGlass(`rgb(255,${gc},${bc})`, "multiply", dx, dy, dw, dh);
+        }
+        const refl = (state.film.refl || 0) / 100;
+        if (refl > 0.05) {
+          paintGlass(`rgba(228,234,244,${(refl * 0.20 * filmAmt).toFixed(3)})`, "screen", dx, dy, dw, dh);
+        }
+      }
+      return;
+    }
 
     if (state.mode === "stills") {
       ctx.drawImage(state.bright, dx, dy, dw, dh);

@@ -9,10 +9,12 @@ window.BUILDINGS = {
   scenes: {
     residential: {
       label: "Residential",
-      stills: {
-        bright: "assets/stills/residential_bright.jpg?v=1",
-        filmed: "assets/stills/residential_filmed.jpg?v=1",
-        mask: "assets/stills/residential_mask.png?v=1",
+      // properly-rendered tint tiers: each is the scene with the glass carrying
+      // a real film at that VLT; the app crossfades the bracketing tiers.
+      tiers: {
+        vlts: [100, 70, 50, 35, 20, 12],
+        prefix: "assets/stills/residential",
+        ver: "2",
         credit: "ZTARK — rendered in Blender",
       },
       glb: "assets/models/buildings/house.glb?v=8",
@@ -21,10 +23,10 @@ window.BUILDINGS = {
     },
     commercial: {
       label: "Commercial",
-      stills: {
-        bright: "assets/stills/commercial_bright.jpg?v=1",
-        filmed: "assets/stills/commercial_filmed.jpg?v=1",
-        mask: "assets/stills/commercial_mask.png?v=1",
+      tiers: {
+        vlts: [100, 70, 50, 35, 20, 12],
+        prefix: "assets/stills/commercial",
+        ver: "2",
         credit: "ZTARK — rendered in Blender",
       },
       glb: "assets/models/buildings/office.glb?v=7",
