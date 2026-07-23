@@ -55,15 +55,42 @@ window.PHOTOVIZ = (function () {
   async function load(cfg) {
     state.loaded = false;
     state.credit = cfg.credit || "";
-    const [photo, mask] = await Promise.all([loadImg(cfg.src), loadImg(cfg.mask)]);
-    state.photo = photo;
-    state.mask = mask;
-    // offscreen buffer for the tinted-glass layer, in photo pixels
+    if (cfg.stills) {
+      // rendered trio: bright (bare glass, full sun) + filmed (strong film)
+      // + glass mask. The room RELIGHTS by blending bright->filmed per VLT
+      // (light is additive, so this is a physically sound relight); the glass
+      // view then takes the film's tone/reflectivity through the mask.
+      const [b, f, m] = await Promise.all([
+        loadImg(cfg.stills.bright), loadImg(cfg.stills.filmed), loadImg(cfg.stills.mask)]);
+      state.bright = b; state.filmed = f; state.mask = m;
+      state.base = b; state.mode = "stills";
+    } else {
+      const [photo, mask] = await Promise.all([loadImg(cfg.src), loadImg(cfg.mask)]);
+      state.photo = photo; state.mask = mask;
+      state.base = photo; state.mode = "photo";
+    }
+    // offscreen buffer for the tinted-glass layer, in image pixels
     state.glassLayer = document.createElement("canvas");
-    state.glassLayer.width = photo.naturalWidth;
-    state.glassLayer.height = photo.naturalHeight;
+    state.glassLayer.width = state.base.naturalWidth;
+    state.glassLayer.height = state.base.naturalHeight;
     state.loaded = true;
     draw();
+  }
+
+  // paint the glass region (via mask) with a fill, composited onto the main
+  // canvas with op ("multiply" for tone, "screen" for reflective sheen).
+  function paintGlass(fill, op, dx, dy, dw, dh) {
+    const g = state.glassLayer, x = g.getContext("2d");
+    x.globalCompositeOperation = "source-over";
+    x.clearRect(0, 0, g.width, g.height);
+    x.fillStyle = fill;
+    x.fillRect(0, 0, g.width, g.height);
+    x.globalCompositeOperation = "destination-in";
+    x.drawImage(state.mask, 0, 0, g.width, g.height);
+    x.globalCompositeOperation = "source-over";
+    state.ctx.globalCompositeOperation = op;
+    state.ctx.drawImage(g, dx, dy, dw, dh);
+    state.ctx.globalCompositeOperation = "source-over";
   }
 
   // rebuild the glass layer for the current film at transmission v (0..1 of
@@ -97,13 +124,44 @@ window.PHOTOVIZ = (function () {
     if (!state.loaded || !state.canvas) return;
     if (state.canvas.width < 4 || state.canvas.height < 4) size();
     const ctx = state.ctx, W = state.canvas.width, H = state.canvas.height;
-    const iw = state.photo.naturalWidth, ih = state.photo.naturalHeight;
+    const iw = state.base.naturalWidth, ih = state.base.naturalHeight;
     // cover fit
     const sc = Math.max(W / iw, H / ih);
     const dw = iw * sc, dh = ih * sc, dx = (W - dw) / 2, dy = (H - dh) / 2;
     const v = state.cur; // 1 = bare, ->0 = film fully applied
+    const filmAmt = 1 - v;
     ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, W, H);
+
+    if (state.mode === "stills") {
+      ctx.drawImage(state.bright, dx, dy, dw, dh);
+      // relight: blend the filmed (strong-film) state over bright by the
+      // film's VLT. filmed was rendered at the ~14% "floor", so a film of VLT
+      // V reaches full filmed at V=14 and none at V=100.
+      const vlt = state.film ? Math.max(0, Math.min(100, state.film.vlt)) : 100;
+      const targetAlpha = Math.min(1, (1 - vlt / 100) / 0.86);
+      const a = targetAlpha * filmAmt;
+      if (a > 0.001) {
+        ctx.globalAlpha = a;
+        ctx.drawImage(state.filmed, dx, dy, dw, dh);
+        ctx.globalAlpha = 1;
+      }
+      // film character on the glass view: warm tone + reflective sheen
+      if (state.film && filmAmt > 0.001) {
+        if (state.film.tone === "warm") {
+          const gc = Math.round(255 * (1 - 0.18 * filmAmt));
+          const bc = Math.round(255 * (1 - 0.40 * filmAmt));
+          paintGlass(`rgb(255,${gc},${bc})`, "multiply", dx, dy, dw, dh);
+        }
+        const refl = (state.film.refl || 0) / 100;
+        if (refl > 0.05) {
+          paintGlass(`rgba(225,232,242,${(refl * 0.24 * filmAmt).toFixed(3)})`, "screen", dx, dy, dw, dh);
+        }
+      }
+      return;
+    }
+
     ctx.drawImage(state.photo, dx, dy, dw, dh);
     // the film changes the light in the room, not just the view: dim the
     // whole frame toward the film's transmission (floored so it never dies)

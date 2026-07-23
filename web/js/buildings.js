@@ -9,10 +9,11 @@ window.BUILDINGS = {
   scenes: {
     residential: {
       label: "Residential",
-      photo: {
-        src: "assets/photos/res.jpg?v=1",
-        mask: "assets/photos/res_mask.png?v=1",
-        credit: "Photo: Unsplash",
+      stills: {
+        bright: "assets/stills/residential_bright.jpg?v=1",
+        filmed: "assets/stills/residential_filmed.jpg?v=1",
+        mask: "assets/stills/residential_mask.png?v=1",
+        credit: "ZTARK — rendered in Blender",
       },
       glb: "assets/models/buildings/house.glb?v=8",
       credit: "ZTARK original concept architecture",
@@ -20,10 +21,11 @@ window.BUILDINGS = {
     },
     commercial: {
       label: "Commercial",
-      photo: {
-        src: "assets/photos/com.jpg?v=1",
-        mask: "assets/photos/com_mask.png?v=1",
-        credit: "Photo: Unsplash",
+      stills: {
+        bright: "assets/stills/commercial_bright.jpg?v=1",
+        filmed: "assets/stills/commercial_filmed.jpg?v=1",
+        mask: "assets/stills/commercial_mask.png?v=1",
+        credit: "ZTARK — rendered in Blender",
       },
       glb: "assets/models/buildings/office.glb?v=7",
       credit: "ZTARK original concept architecture",
