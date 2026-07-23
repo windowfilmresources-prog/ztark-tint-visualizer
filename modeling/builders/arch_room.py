@@ -266,6 +266,10 @@ def build():
         bv = ob.modifiers.new("bv", "BEVEL")
         bv.width = bevel
         bv.segments = 4
+        try:
+            bpy.ops.object.shade_smooth_by_angle(angle=0.9)
+        except Exception:
+            bpy.ops.object.shade_smooth()
         ob.data.materials.append(mat)
         return ob
 
