@@ -16,7 +16,8 @@ import math
 import os
 
 SELF_WORLD = True
-SUN_ENERGY = 7.0
+SUN_ENERGY = 9.0
+SUN_ROT = (53, 0, 344)  # defined ~37deg sun angled to rake the wood floor with sharp shadows
 
 A = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "assets", "polyhaven")
@@ -211,6 +212,11 @@ def build():
         x = X0 + i * pw
         g = box(f"Glass_{i}", x + 0.03, x + pw - 0.03, yF - 0.006, yF + 0.006,
                 0.05, H - 0.12, m_glass)
+        # let direct sun pass the pane so it casts a real sunlit pool. Cycles
+        # treats sharp sun through transmissive glass as a caustic (unrendered)
+        # so the pane otherwise shadows the floor and the room lights flatly.
+        # Opaque mullions/head/sill still cast the sharp window-bar shadows.
+        g.visible_shadow = False
 
     # curtains flanking the glass — fine mesh + deeper folds + hem off the
     # floor so the base doesn't read as a solid box in shadow
@@ -308,12 +314,13 @@ def build():
     # lamp mesh is authored 0.22-1.17 ABOVE its origin — drop the root so the
     # pendant actually hangs below the ceiling instead of inside the roof
     append_asset("modern_ceiling_lamp_01", at=(-0.4, 0.25, H - 1.17))
-    # soft interior fill so furniture against the bright glass doesn't
-    # silhouette — standard archviz practice, kept subtle
+    # subtle fill only — a strong fill flattens the sun pool and softens the
+    # shadows we WANT for a dramatic film demo. Keep it low so the raking sun
+    # and its sharp mullion-bar shadows read.
     _fd = bpy.data.lights.new("FillArea", type="AREA")
-    _fd.energy = 55
+    _fd.energy = 20
     _fd.size = 3.2
-    _fd.color = (1.0, 0.95, 0.9)
+    _fd.color = (0.9, 0.94, 1.0)  # cool fill so the warm sun pool pops
     _fo = bpy.data.objects.new("FillArea", _fd)
     _fo.location = (-0.3, 1.2, H - 0.06)
     bpy.context.collection.objects.link(_fo)
@@ -485,7 +492,7 @@ def build():
     nt.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
     bg = nt.nodes.new("ShaderNodeBackground")
     bg.name = "Background"
-    bg.inputs["Strength"].default_value = 1.0
+    bg.inputs["Strength"].default_value = 0.8  # dim ambient so the raking sun dominates
     out = nt.nodes.new("ShaderNodeOutputWorld")
     nt.links.new(env.outputs["Color"], bg.inputs["Color"])
     nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
