@@ -845,6 +845,8 @@
       return;
     }
     const d = window.BSAVINGS.defaults(S.space);
+    const floorSet = S.bs.floor[S.space] ?? d.floor;
+    const glassManual = !!S.bs.sqftManual[S.space];
     const r = window.BSAVINGS.compute({
       sqft: S.bs.sqft[S.space] ?? d.sqft,
       tser: sh.tser,
@@ -853,10 +855,23 @@
       costPerSqft: S.bs.cost[S.space] ?? d.cost,
       sunFactor: window.BSAVINGS.sunFactor(S.bs.sun[S.space]),
       glassFactor: window.BSAVINGS.glassFactor(S.bs.glass[S.space]),
+      filmName: (bSeries().name || "") + " " + (sh.sku != null ? sh.sku : ""),
+      floorSqft: glassManual ? null : floorSet,   // show derivation only when auto
+      sunLabel: S.bs.sun[S.space] || "med",
     });
     $("bsResults").innerHTML = r.tiles.map(([v, l]) =>
       `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
-    $("bsNote").innerHTML = r.note;
+    const tag = { you: "your info", src: "sourced", est: "ZTARK estimate", calc: "math", tot: "" };
+    const rows = r.steps.map((st) =>
+      `<div class="mrow ${st.k}"><div class="mlab">${st.t}</div><div class="mval">${st.d}</div>` +
+      (st.src ? `<div class="msrc kind-${st.k}">${st.src}</div>` : `<div class="msrc"></div>`) + `</div>`).join("");
+    $("bsNote").innerHTML =
+      r.note +
+      `<details class="sv-math"><summary>Show the math</summary>` +
+      `<div class="mhead">Every number below, and where it comes from — <b>your info</b>, a <b>published source</b>, or a labeled <b>ZTARK estimate</b>.</div>` +
+      `<div class="mtable">${rows}</div>` +
+      `<ul class="msrclist">${r.sources.filter(Boolean).map((x) => `<li>${x}</li>`).join("")}</ul>` +
+      `</details>`;
   }
 
   // ---------- tint law ----------

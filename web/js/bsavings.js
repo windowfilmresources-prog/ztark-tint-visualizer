@@ -214,23 +214,75 @@
         [fmtMoney(annual) + "/yr", "Total value / year"],
       ];
 
-      // itemized, sourced breakdown
+      // itemized breakdown for the note
       var parts = [fmtMoney(energy) + " cooling energy", fmtMoney(fade) + " UV / fade protection"];
       if (com) parts.splice(1, 0, fmtMoney(demand) + " peak-demand charges");
       var note =
-        "<b>" + fmtMoney(annual) + "/yr</b> = " + parts.join(" + ") + ". " +
-        (s.name
-          ? s.name + ": ~" + s.cdd.toLocaleString() + " cooling degree days, $" + rate.toFixed(2) +
-            "/kWh, SEER " + seer + " average AC. "
-          : "U.S.-average climate — enter your ZIP above for a local estimate. ") +
-        "This film rejects " + Math.round(tser * 100) + "% of solar heat, and blocks 99% of the UV that fades " +
-        "furnishings, floors and art near the glass" + (com ? "; commercial spaces cool longer hours and pay peak-demand charges, so the glass works harder" : "") + ". " +
-        "Modeled on the sun-facing glass film is applied to; comfort and glare relief come on top of these numbers. " +
-        "Lifetime figure covers " + n + " years with ~" + Math.round(g * 100) + "%/yr energy inflation. " +
-        "Directional estimate (NOAA / EIA / DOE / ASHRAE typicals + IWFA fade guidance); orientation, shading and glass type move the real answer. " +
-        "Install estimated at " + fmtMoney(costSqft) + "/sq ft — your dealer quotes the exact price.";
-      return { tiles: tiles, note: note, dollars: annual, energy: energy, fade: fade,
-               demand: demand, kwh: kwh, payback: payback, lifetime: lifetime };
+        "<b>" + fmtMoney(annual) + "/yr</b> = " + parts.join(" + ") +
+        ". Directional estimate — open <b>Show the math</b> for every number, formula and source.";
+
+      // --- "show our math": every step, with where each number comes from ---
+      // k: "you" = customer/dealer input · "src" = published source ·
+      //    "est" = ZTARK engineering estimate · "calc" = arithmetic · "tot" = subtotal
+      var load0 = 32 + 0.023 * s.cdd;
+      var heatBlocked = load * tser;         // kBTU/sqft-yr the film stops
+      var kwhSqft = heatBlocked / seer;
+      var fadeRate = com ? C.FADE_COM : C.FADE_RES;
+      var pct = function (x) { return Math.round(x * 100) + "%"; };
+      var steps = [
+        { t: "Your climate",
+          d: (s.name || "U.S. average") + " — " + s.cdd.toLocaleString() + " cooling degree-days, electricity $" + rate.toFixed(3) + "/kWh",
+          src: "NOAA (CDD) · EIA (rates)", k: "src" },
+        { t: "Glass being filmed",
+          d: sqft.toLocaleString() + " sq ft" + (o.floorSqft ? " — estimated from a " + o.floorSqft.toLocaleString() + " sq ft " + (com ? "building" : "home") : ""),
+          src: o.floorSqft ? "your input (glass editable)" : "your input", k: "you" },
+        { t: "Film performance",
+          d: (o.filmName ? o.filmName + " " : "") + "rejects " + pct(tser) + " of solar heat (TSER)",
+          src: "manufacturer spec sheet", k: "src" },
+        { t: "Existing glass" + (o.sunLabel ? " & sun" : ""),
+          d: "sun exposure ×" + sunF + (glassF !== 1 ? ", glass type ×" + glassF : "") + (com ? ", commercial hours ×" + C.COMMERCIAL_LOAD : ""),
+          src: "ASHRAE orientation · NFRC glazing", k: "est" },
+        { t: "Solar heat load on that glass",
+          d: "(32 + 0.023 × " + s.cdd.toLocaleString() + ") × " + sunF + (glassF !== 1 ? " × " + glassF : "") + (com ? " × " + C.COMMERCIAL_LOAD : "") + " = " + Math.round(load).toLocaleString() + " kBTU/sq ft·yr",
+          src: "cooling-degree-day proxy", k: "est" },
+        { t: "Heat the film blocks",
+          d: Math.round(load).toLocaleString() + " × " + pct(tser) + " = " + Math.round(heatBlocked).toLocaleString() + " kBTU/sq ft·yr",
+          src: "arithmetic", k: "calc" },
+        { t: "AC electricity to remove it",
+          d: Math.round(heatBlocked).toLocaleString() + " ÷ SEER " + seer + " = " + kwhSqft.toFixed(1) + " kWh/sq ft·yr",
+          src: "DOE SEER", k: "src" },
+        { t: "Across all the glass",
+          d: kwhSqft.toFixed(1) + " × " + sqft.toLocaleString() + " sq ft = " + Math.round(kwh).toLocaleString() + " kWh/yr saved",
+          src: "arithmetic", k: "calc" },
+        { t: "Cooling energy saved",
+          d: Math.round(kwh).toLocaleString() + " kWh × $" + rate.toFixed(3) + " = " + fmtMoney(energy) + "/yr",
+          src: "EIA rate", k: "src" },
+        { t: "UV / fade protection",
+          d: sqft.toLocaleString() + " sq ft × $" + fadeRate.toFixed(2) + "/sq ft = " + fmtMoney(fade) + "/yr",
+          src: "ZTARK estimate — deferred replacement of sun-faded goods (film blocks 99% UV)", k: "est" },
+      ];
+      if (com) steps.push({ t: "Peak-demand charge savings",
+        d: fmtMoney(energy) + " × " + pct(C.DEMAND_COM) + " = " + fmtMoney(demand) + "/yr",
+        src: "ZTARK estimate — commercial demand coincidence", k: "est" });
+      steps.push({ t: "Total value / year", d: fmtMoney(annual) + "/yr", src: "sum of the above", k: "tot" });
+      steps.push({ t: "Install cost", d: sqft.toLocaleString() + " sq ft × $" + costSqft.toFixed(2) + "/sq ft = " + fmtMoney(cost), src: "your dealer's price", k: "you" });
+      steps.push({ t: "Pays for itself", d: fmtMoney(cost) + " ÷ " + fmtMoney(annual) + "/yr = " + pb, src: "arithmetic", k: "tot" });
+      steps.push({ t: "Saved over " + n + " years", d: fmtMoney(annual) + "/yr × " + mult.toFixed(1) + " (compounds at ~" + pct(g) + "/yr energy inflation) = " + fmtBig(lifetime), src: "EIA long-run price trend", k: "tot" });
+
+      var sources = [
+        "Cooling degree-days: NOAA 1991-2020 normals via EIA SEDS (population-weighted, base 65°F).",
+        "Electricity rates: EIA Electric Power Monthly Table 5.6.A (residential; commercial = ×0.72 per EIA).",
+        "AC efficiency: U.S. DOE SEER2 minimums (14.3 South / 13.4 North), installed stock.",
+        "Film solar rejection (TSER): the film's own manufacturer spec sheet.",
+        "Sun-facing & glass-type factors: ASHRAE Fundamentals orientation solar factors; NFRC glazing SHGC.",
+        "UV / fade protection: ZTARK estimate of deferred furnishing replacement; film blocks 99% UV (IWFA).",
+        (com ? "Peak-demand savings: ZTARK estimate from typical commercial demand charges & solar coincidence. " : "") +
+        "Energy inflation: ~" + pct(g) + "/yr, EIA long-run electricity price trend.",
+        "Comfort and glare relief are real but not dollar-counted here — they come on top.",
+      ];
+      return { tiles: tiles, note: note, steps: steps, sources: sources,
+               dollars: annual, energy: energy, fade: fade, demand: demand,
+               kwh: kwh, payback: payback, lifetime: lifetime };
     },
   };
 })();
