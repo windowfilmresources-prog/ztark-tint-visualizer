@@ -113,6 +113,20 @@
     // Long-run electricity + replacement-cost inflation (EIA real+nominal
     // electricity price growth has run ~2-3%/yr). Compounds the lifetime total.
     ESCALATION: 0.03,
+
+    // --- deriving glass area the customer doesn't know off-hand ---
+    // Fraction of floor area that is SUN-FACING glass worth filming. Whole-house
+    // window-to-floor ratio ~15%; ~half faces sun and gets film. Commercial
+    // glazing ratio runs higher (storefronts / curtain wall).
+    GLASS_PER_FLOOR_RES: 0.08,
+    GLASS_PER_FLOOR_COM: 0.14,
+    // Direct-sun exposure -> the sun-facing solar-gain multiplier (replaces the
+    // fixed SUN_FACING when the customer answers). Big unshaded S/W glass vs a
+    // mostly-shaded lot swings the real gain a lot.
+    SUN_HIGH: 1.95, SUN_MED: 1.5, SUN_LOW: 1.05,
+    // Existing glazing: single pane transmits & conducts more heat, so film
+    // removes more; modern dual / low-E already blocks some, so film adds less.
+    GLASS_SINGLE: 1.18, GLASS_DUAL: 1.0, GLASS_LOWE: 0.82,
   };
 
   function zipToState(zip) {
@@ -141,7 +155,24 @@
 
     defaults: function (space) {
       var com = space === "commercial";
-      return { sqft: com ? C.SQFT_COM : C.SQFT_RES, cost: com ? C.COST_COM : C.COST_RES };
+      return {
+        sqft: com ? C.SQFT_COM : C.SQFT_RES,
+        cost: com ? C.COST_COM : C.COST_RES,
+        floor: com ? 8000 : 2200,   // typical building / home floor area
+      };
+    },
+
+    // estimate sun-facing filmable glass from floor area (customer knows this)
+    deriveGlass: function (floorSqft, space) {
+      var com = space === "commercial";
+      var g = (floorSqft || 0) * (com ? C.GLASS_PER_FLOOR_COM : C.GLASS_PER_FLOOR_RES);
+      return Math.max(0, Math.round(g / 5) * 5);
+    },
+    sunFactor: function (key) {
+      return { high: C.SUN_HIGH, med: C.SUN_MED, low: C.SUN_LOW }[key] || C.SUN_FACING;
+    },
+    glassFactor: function (key) {
+      return { single: C.GLASS_SINGLE, dual: C.GLASS_DUAL, lowe: C.GLASS_LOWE }[key] || 1.0;
     },
 
     // o: { sqft, tser (0-100), usState, commercial, costPerSqft, rate?, seer? }
@@ -153,9 +184,11 @@
       var tser = Math.max(0, Math.min(1, (o.tser || 0) / 100));
       var sqft = Math.max(0, o.sqft || 0);
       var costSqft = o.costPerSqft || (com ? C.COST_COM : C.COST_RES);
+      var sunF = o.sunFactor || C.SUN_FACING;   // set by the "direct sun" answer
+      var glassF = o.glassFactor || 1.0;         // set by the "existing glass" answer
 
       // 1) cooling energy — modeled on the SUN-FACING glass film actually goes on
-      var load = (32 + 0.023 * s.cdd) * C.SUN_FACING * (com ? C.COMMERCIAL_LOAD : 1); // kBTU/sqft-yr
+      var load = (32 + 0.023 * s.cdd) * sunF * glassF * (com ? C.COMMERCIAL_LOAD : 1); // kBTU/sqft-yr
       var kwh = (sqft * load * tser) / seer;
       var energy = kwh * rate;
       // 2) UV / fade protection — deferred replacement of sun-faded goods

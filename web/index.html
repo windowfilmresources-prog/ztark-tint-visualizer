@@ -105,8 +105,25 @@
             <label class="sv-field">State
               <select class="law-select" id="bsState"></select>
             </label>
-            <label class="sv-field">Glass area (sq ft)
-              <input id="bsSqft" type="number" min="20" max="50000" step="10" inputmode="numeric">
+            <label class="sv-field" id="bsFloorField">Home size (sq ft)
+              <input id="bsFloor" type="number" min="200" max="2000000" step="100" inputmode="numeric">
+            </label>
+            <label class="sv-field">Glass to film (sq ft)
+              <input id="bsSqft" type="number" min="20" max="500000" step="10" inputmode="numeric">
+            </label>
+            <label class="sv-field">Direct sun on the glass
+              <select class="law-select" id="bsSun">
+                <option value="med">Some sun (mixed)</option>
+                <option value="high">A lot — big south / west windows</option>
+                <option value="low">Mostly shaded</option>
+              </select>
+            </label>
+            <label class="sv-field">Existing glass
+              <select class="law-select" id="bsGlass">
+                <option value="dual">Dual pane (standard)</option>
+                <option value="single">Single pane</option>
+                <option value="lowe">Dual pane low-E</option>
+              </select>
             </label>
             <label class="sv-field">Installed $ / sq ft
               <input id="bsCost" type="number" min="3" max="30" step="0.5" inputmode="decimal">
@@ -135,10 +152,10 @@
   <script src="js/tintlaws.js?rel=62"></script>
   <script src="js/buildings.js?rel=65"></script>
   <script src="js/photoviz.js?rel=65"></script>
-  <script src="js/bsavings.js?rel=66"></script>
+  <script src="js/bsavings.js?rel=67"></script>
   <script src="js/brands.js?rel=64"></script>
   <script src="js/intro.js?rel=62"></script>
   <script src="js/savings.js?rel=62"></script>
-  <script src="js/app.js?rel=65"></script>
+  <script src="js/app.js?rel=67"></script>
 </body>
 </html>

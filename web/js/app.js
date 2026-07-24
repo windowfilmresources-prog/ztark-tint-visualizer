@@ -775,7 +775,8 @@
     if (!window.BSAVINGS || !BCAT || !$("bsCard")) return;
     $("bsCard").hidden = false;
     $("bsCard").style.display = "none"; // vehicles space at boot; enterSpace reveals
-    S.bs = { on: false, zip: "", usState: null, sqft: {}, cost: {} };
+    S.bs = { on: false, zip: "", usState: null, sqft: {}, cost: {}, floor: {},
+             sun: {}, glass: {}, sqftManual: {} };
     const sel = $("bsState");
     sel.innerHTML = `<option value="">Select your state…</option>` +
       Object.entries(window.BSAVINGS.STATES)
@@ -799,7 +800,22 @@
       if (S.bs.usState) track("viz_savings", S.space + " state", S.bs.usState);
       renderBSavings();
     });
-    $("bsSqft").addEventListener("input", () => { S.bs.sqft[S.space] = +$("bsSqft").value || null; renderBSavings(); });
+    $("bsFloor").addEventListener("input", () => {
+      S.bs.floor[S.space] = +$("bsFloor").value || null;
+      // re-estimate glass area from floor size unless the user set it by hand
+      if (!S.bs.sqftManual[S.space]) {
+        const g = window.BSAVINGS.deriveGlass(S.bs.floor[S.space], S.space);
+        if (g) { S.bs.sqft[S.space] = g; $("bsSqft").value = g; }
+      }
+      renderBSavings();
+    });
+    $("bsSqft").addEventListener("input", () => {
+      S.bs.sqft[S.space] = +$("bsSqft").value || null;
+      S.bs.sqftManual[S.space] = true; // user override wins over the estimate
+      renderBSavings();
+    });
+    $("bsSun").addEventListener("change", () => { S.bs.sun[S.space] = $("bsSun").value; renderBSavings(); });
+    $("bsGlass").addEventListener("change", () => { S.bs.glass[S.space] = $("bsGlass").value; renderBSavings(); });
     $("bsCost").addEventListener("input", () => { S.bs.cost[S.space] = +$("bsCost").value || null; renderBSavings(); });
     syncBsInputs();
   }
@@ -807,9 +823,15 @@
   // reflect the current space's defaults into the inputs (user edits win)
   function syncBsInputs() {
     if (!S.bs || !$("bsSqft") || S.space === "vehicles") return;
+    const com = S.space === "commercial";
     const d = window.BSAVINGS.defaults(S.space);
+    if ($("bsFloorField")) $("bsFloorField").childNodes[0].nodeValue =
+      com ? "Building floor area (sq ft) " : "Home size (sq ft) ";
+    $("bsFloor").value = S.bs.floor[S.space] ?? d.floor;
     $("bsSqft").value = S.bs.sqft[S.space] ?? d.sqft;
     $("bsCost").value = S.bs.cost[S.space] ?? d.cost;
+    $("bsSun").value = S.bs.sun[S.space] || "med";
+    $("bsGlass").value = S.bs.glass[S.space] || "dual";
     renderBSavings();
   }
 
@@ -829,6 +851,8 @@
       usState: S.bs.usState,
       commercial: S.space === "commercial",
       costPerSqft: S.bs.cost[S.space] ?? d.cost,
+      sunFactor: window.BSAVINGS.sunFactor(S.bs.sun[S.space]),
+      glassFactor: window.BSAVINGS.glassFactor(S.bs.glass[S.space]),
     });
     $("bsResults").innerHTML = r.tiles.map(([v, l]) =>
       `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
