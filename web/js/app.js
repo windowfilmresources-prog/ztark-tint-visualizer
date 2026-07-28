@@ -83,6 +83,7 @@
     usState: "",
     comparing: false,
     space: "vehicles",               // vehicles | residential | commercial
+    env: "gray",                     // 3D studio environment (viewer3d ENVIRONMENTS)
     b: {                             // per-space architectural film selection
       residential: { series: 0, shade: null, view: "exterior" },
       commercial: { series: 0, shade: null, view: "exterior" },
@@ -496,6 +497,7 @@
     const building = S.space !== "vehicles";
     $("vehTabs").parentElement.style.display = building ? "none" : "";
     $("paints").parentElement.style.display = building ? "none" : "";
+    if ($("envTabs")) $("envTabs").parentElement.style.display = building ? "none" : "";
     $("holdCompare").style.display = ""; // hold-to-compare works in every space
     renderViewTabs(building);
     if (building) return;
@@ -529,6 +531,25 @@
         if (MODE_3D) { if (window.VIEWER3D) window.VIEWER3D.setPaint(S.paint); }
         else if (!PHOTO_MODE) $("stage").querySelector("svg").style.setProperty("--paint", S.paint);
       }));
+
+    // studio environment picker (3D car mode only)
+    const envGroup = $("envTabs").parentElement;
+    const envs = (MODE_3D && window.VIEWER3D && window.VIEWER3D.environments) || [];
+    if (PHOTO_MODE || !envs.length) { envGroup.style.display = "none"; }
+    else {
+      envGroup.style.display = "";
+      const cur = (window.VIEWER3D && window.VIEWER3D.environment) || S.env;
+      const refocusEnv = keepFocus($("envTabs"));
+      $("envTabs").innerHTML = envs.map((e) =>
+        `<button class="veh-btn ${e.id === cur ? "active" : ""}" aria-pressed="${e.id === cur}" data-e="${e.id}">${e.name}</button>`).join("");
+      $("envTabs").querySelectorAll("button").forEach((b) =>
+        b.addEventListener("click", () => {
+          S.env = b.dataset.e;
+          if (window.VIEWER3D) window.VIEWER3D.setEnvironment(S.env);
+          renderStageTools();
+        }));
+      refocusEnv();
+    }
   }
 
   const hold = $("holdCompare");

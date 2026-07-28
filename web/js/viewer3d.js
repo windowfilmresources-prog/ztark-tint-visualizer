@@ -1319,6 +1319,13 @@ function armReveal() {
   c.updateProjectionMatrix();
   if (state.controls) state.controls.enabled = false;
   ensureRevealRig(); // pre-car: floor etc.; rebuilt with the car's materials in playReveal
+  // the dark-beat + DRL glow needs a COLOR background to lerp; env backdrops
+  // are textures, so swap in the reveal color now — finish() -> restoreCarCamera
+  // re-applies the chosen studio set (bg/fog/rig) at the end.
+  if (state.scene) {
+    state.scene.background = REVEAL_DARK.clone();
+    if (state.scene.fog) state.scene.fog.color.copy(state.scene.background);
+  }
   revealLights(0);
   if (state.loadingEl) {
     state.loadingEl.style.background = "#0a0a0b"; // keep the black continuity from the opener
