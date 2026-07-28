@@ -1021,7 +1021,11 @@ function mount(container) {
     document.dispatchEvent(new Event("viewer3d-unavailable"));
     return;
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Supersample the render: 1x / low-DPR desktops otherwise show jagged
+  // tint-glass edges (MSAA 4x alone isn't enough at native res). Floor the
+  // effective pixel ratio at 1.8 and cap at 2 — the car scene is light
+  // (baked shadows, on-demand renders) so the extra pixels are affordable.
+  renderer.setPixelRatio(Math.min(2, Math.max(window.devicePixelRatio || 1, 1.8)));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -1556,6 +1560,16 @@ window.VIEWER3D = {
     c.width = w; c.height = Math.round(w * src.height / src.width);
     c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
     return c.toDataURL("image/jpeg", q);
+  },
+  // TEST-ONLY: force a render pixel ratio to reproduce low-DPR jaggedness and
+  // A/B the supersampling fix. Returns the resulting render-buffer size.
+  qualityProbe(pr) {
+    if (!state.renderer) return null;
+    state.renderer.setPixelRatio(pr);
+    resize();
+    state.renderer.render(state.scene, state.camera);
+    const cv = state.renderer.domElement;
+    return { pr, buffer: [cv.width, cv.height] };
   },
   debugPick(clientX, clientY) {
     const r = state.renderer.domElement.getBoundingClientRect();
