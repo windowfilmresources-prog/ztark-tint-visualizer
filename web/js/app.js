@@ -541,7 +541,8 @@
       const cur = (window.VIEWER3D && window.VIEWER3D.environment) || S.env;
       const refocusEnv = keepFocus($("envTabs"));
       $("envTabs").innerHTML = envs.map((e) =>
-        `<button class="veh-btn ${e.id === cur ? "active" : ""}" aria-pressed="${e.id === cur}" data-e="${e.id}">${e.name}</button>`).join("");
+        `<button class="veh-btn env-btn ${e.id === cur ? "active" : ""}" aria-pressed="${e.id === cur}" data-e="${e.id}">` +
+        `<span class="env-dot" style="background:${e.swatch || "#ccc"}"></span>${e.name}</button>`).join("");
       $("envTabs").querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => {
           S.env = b.dataset.e;
