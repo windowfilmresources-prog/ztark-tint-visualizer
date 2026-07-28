@@ -39,23 +39,26 @@ const ENVIRONMENTS = [
   {
     id: "graphite", name: "Graphite", swatch: "#26282c", hdri: "studio_small_03.hdr",
     bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.18,
-    floor: { color: 0x1b1d20, roughness: 0.16, metalness: 0.0, env: 1.15 },
+    floor: { color: 0x1b1d20, roughness: 0.32, metalness: 0.0, env: 0.7 },
     rig: { key: [0xfff6ee, 1.55], fill: [0x9fb2cc, 0.28], rim: [0xffffff, 0.85] },
     fog: [0x191b1e, 12, 34], envInt: 1.0,
   },
   {
     id: "showroom", name: "Warm Showroom", swatch: "#6f5a43", hdri: "brown_photostudio_02.hdr",
     bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.1,
-    floor: { color: 0x241f1b, roughness: 0.26, metalness: 0.0, env: 1.0 },
+    floor: { color: 0x241f1b, roughness: 0.4, metalness: 0.0, env: 0.7 },
     rig: { key: [0xffe9cf, 1.42], fill: [0xf0e0cc, 0.34], rim: [0xfff2e0, 0.62] },
     fog: [0x241f1b, 12, 34], envInt: 1.0,
   },
   {
+    // outdoor HDRI drives the reflections + light; a blended sky gradient is
+    // the backdrop (the raw HDRI-as-background put a hard horizon seam across
+    // the flat floor). Floor tone meets the gradient's lower stop, no seam.
     id: "sky", name: "Open Sky", swatch: "#8bb0d0", hdri: "kloofendal_48d_partly_cloudy.hdr",
-    bg: { hdri: true }, exposure: 0.95,
-    floor: { color: 0x3b3e42, roughness: 0.42, metalness: 0.0, env: 0.7 },
+    bg: { grad: ["#7ba6cf", "#cfd9e2"] }, exposure: 0.98,
+    floor: { color: 0xc2cad2, roughness: 0.5, metalness: 0.0, env: 0.55 },
     rig: { key: [0xfff5e2, 1.5], fill: [0xcfe0f5, 0.5], rim: [0xffffff, 0.4] },
-    fog: [0x9fb3c8, 16, 44], envInt: 1.0,
+    fog: [0xcdd8e2, 13, 40], envInt: 1.0,
   },
 ];
 
@@ -974,6 +977,7 @@ function loadCar(cfg) {
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
     });
     state.carReady = true;
+    setTimeout(preloadEnvironments, 1200); // warm all HDRIs so picker swaps don't stall
     if (prep.building) {
       state.buildingPrep = prep;
       state.buildingIsoDir = cfg.isoDir || [1, 0.62, -1];
@@ -1051,6 +1055,12 @@ function mount(container) {
     return;
   }
   state.container = container;
+
+  // crossfade overlay for smooth environment swaps (no choppy snap)
+  const envFade = document.createElement("div");
+  envFade.style.cssText = "position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity .16s ease;z-index:2;background:#cfd3d7;";
+  container.appendChild(envFade);
+  state.envFadeEl = envFade;
 
   container.insertAdjacentHTML("beforeend",
     `<div class="viewer-loading" id="viewerLoading"><div class="spin"></div><div class="pct">LOADING</div></div>`);
@@ -1511,6 +1521,21 @@ function applyEnvironment(id) {
   if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
 }
 
+// warm every environment's HDRI + PMREM once (idle, after the first car) so
+// picker swaps are instant instead of stalling on load + prefilter
+let _envPreloaded = false;
+function preloadEnvironments() {
+  if (_envPreloaded || !state.pmrem) return;
+  _envPreloaded = true;
+  let i = 0;
+  const next = () => {
+    if (i >= ENVIRONMENTS.length) return;
+    const e = ENVIRONMENTS[i++];
+    loadHDRI(e.hdri, () => setTimeout(next, 120)); // stagger so we don't hitch
+  };
+  next();
+}
+
 function resize() {
   if (!state.renderer || !state.container) return;
   const w = state.container.clientWidth || 800;
@@ -1579,7 +1604,19 @@ window.VIEWER3D = {
   zones: ZONES,
   environments: ENVIRONMENTS.map((e) => ({ id: e.id, name: e.name, swatch: e.swatch })),
   get environment() { return state.envId; },
-  setEnvironment(id) { applyEnvironment(id); },
+  setEnvironment(id) {
+    const e = ENVIRONMENTS.find((x) => x.id === id);
+    if (state.envFadeEl && e && state.envId !== id) {
+      // fade toward the new set's tone, swap while covered, fade back — smooth
+      state.envFadeEl.style.background = e.swatch || "#cfd3d7";
+      state.envFadeEl.style.opacity = "0.92";
+      setTimeout(() => {
+        applyEnvironment(id);
+        if (state.renderer) state.renderer.render(state.scene, state.camera);
+        requestAnimationFrame(() => { state.envFadeEl.style.opacity = "0"; });
+      }, 170);
+    } else applyEnvironment(id);
+  },
   get carReady() { return state.carReady; },
   loadCar(idOrCfg) {
     const cfg = typeof idOrCfg === "string" ? FLEET.find((f) => f.id === idOrCfg) : idOrCfg;
