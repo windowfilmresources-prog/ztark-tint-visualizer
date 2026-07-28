@@ -681,8 +681,8 @@ function prepareCar(root, cfg) {
   for (const m of (exactPaintMats.length ? exactPaintMats : heuristicPaintMats)) {
     m.map = null;
     m.metalness = 0.15;
-    m.roughness = 0.4;
-    m.envMapIntensity = 1.15;
+    m.roughness = 0.52;      // satin car-paint gloss, not mirror/glass
+    m.envMapIntensity = 0.85; // HDRI sets punchier reflections; dial them back
     m.needsUpdate = true;
     bodyMats.push(m);
   }
@@ -718,8 +718,8 @@ function prepareCar(root, cfg) {
       ranked.filter(([, a]) => a > top * 0.5).slice(0, 2).forEach(([m]) => {
         m.map = null;
         m.metalness = 0.15;
-        m.roughness = 0.4;
-        m.envMapIntensity = 1.15;
+        m.roughness = 0.52;      // satin car-paint gloss, not mirror/glass
+        m.envMapIntensity = 0.85; // HDRI sets punchier reflections; dial them back
         m.needsUpdate = true;
         bodyMats.push(m);
       });

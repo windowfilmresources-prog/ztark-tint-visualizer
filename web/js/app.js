@@ -95,7 +95,7 @@
   const BSCENES = (window.BUILDINGS && window.BUILDINGS.scenes) || {};
 
   const PAINTS = [
-    ["White",  "#e8eaec"], ["Silver", "#b7bcc2"], ["Gray", "#686d73"],
+    ["White",  "#dfe2e5"], ["Silver", "#b7bcc2"], ["Gray", "#686d73"],
     ["Black",  "#1a1c1f"], ["Red",    "#8e1c24"], ["Blue", "#24406e"],
   ];
 
