@@ -11,8 +11,52 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 export const ZONES = ["windshield", "front", "rear", "back"];
+
+// -------------------------------------------------------------------------
+// Environments — full studio "sets": each is a real HDRI (image-based
+// lighting + reflections) + a designed backdrop, floor, light rig, exposure
+// and fog. Switch with VIEWER3D.setEnvironment(id).
+// -------------------------------------------------------------------------
+const ENVIRONMENTS = [
+  {
+    id: "white", name: "White Studio", hdri: "studio_small_09.hdr",
+    bg: { grad: ["#ffffff", "#eceef0"] }, exposure: 1.04,
+    floor: { color: 0xf3f4f6, roughness: 0.55, metalness: 0.0, env: 0.5 },
+    rig: { key: [0xfff4e8, 1.3], fill: [0xdfe8ff, 0.45], rim: [0xffffff, 0.5] },
+    fog: [0xeef0f2, 11, 30], envInt: 0.85,
+  },
+  {
+    id: "gray", name: "Neutral Gray", hdri: "photo_studio_01.hdr",
+    bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 1.0,
+    floor: { color: 0xa6aaae, roughness: 0.5, metalness: 0.0, env: 0.65 },
+    rig: { key: [0xfff4ea, 1.25], fill: [0xe2e8f0, 0.4], rim: [0xffffff, 0.55] },
+    fog: [0xaeb2b6, 12, 32], envInt: 0.9,
+  },
+  {
+    id: "graphite", name: "Graphite", hdri: "studio_small_03.hdr",
+    bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.18,
+    floor: { color: 0x1b1d20, roughness: 0.16, metalness: 0.0, env: 1.15 },
+    rig: { key: [0xfff6ee, 1.55], fill: [0x9fb2cc, 0.28], rim: [0xffffff, 0.85] },
+    fog: [0x191b1e, 12, 34], envInt: 1.0,
+  },
+  {
+    id: "showroom", name: "Warm Showroom", hdri: "brown_photostudio_02.hdr",
+    bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.1,
+    floor: { color: 0x241f1b, roughness: 0.26, metalness: 0.0, env: 1.0 },
+    rig: { key: [0xffe9cf, 1.42], fill: [0xf0e0cc, 0.34], rim: [0xfff2e0, 0.62] },
+    fog: [0x241f1b, 12, 34], envInt: 1.0,
+  },
+  {
+    id: "sky", name: "Open Sky", hdri: "kloofendal_48d_partly_cloudy.hdr",
+    bg: { hdri: true }, exposure: 0.95,
+    floor: { color: 0x3b3e42, roughness: 0.42, metalness: 0.0, env: 0.7 },
+    rig: { key: [0xfff5e2, 1.5], fill: [0xcfe0f5, 0.5], rim: [0xffffff, 0.4] },
+    fog: [0x9fb3c8, 16, 44], envInt: 1.0,
+  },
+];
 
 // Default fleet. app.js can override with window.CAR3D_FLEET before this module runs.
 // ?car=proc → procedural sedan; ?car=<name> → lab model (contract mesh names).
@@ -555,18 +599,16 @@ function applyBuildingView(view) {
 }
 
 function restoreCarCamera() {
-  if (state.renderer) state.renderer.toneMappingExposure = 1.0;
   if (state.interiorFill) state.interiorFill.visible = false;
   if (state.buildingHemi) state.buildingHemi.visible = false;
-  if (state.scene) state.scene.background = new THREE.Color(0xf2f3f5);
-  if (state.scene) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
+  if (state.scene && !state.scene.fog) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
   if (state.keyLight) {
-    state.keyLight.intensity = 1.35;
     state.keyLight.shadow.radius = 9;
     state.keyLight.position.set(4.5, 6.5, 3.5);
     state.keyLight.target.position.set(0, 0, 0);
     state.keyLight.target.updateMatrixWorld();
   }
+  applyEnvironment(state.envId || "gray"); // restore the chosen studio set (bg/fog/exposure/rig)
   if (state.renderer) state.renderer.shadowMap.needsUpdate = true; // key moved
   const cam = state.persCam;
   cam.fov = 38;
@@ -1047,8 +1089,10 @@ function mount(container) {
   state.persCam = camera;
   state.orthoCam = new THREE.OrthographicCamera(-4, 4, 2.25, -2.25, 0.1, 60);
 
-  const env = new THREE.PMREMGenerator(renderer);
-  scene.environment = env.fromScene(new RoomEnvironment(), 0.04).texture;
+  state.pmrem = new THREE.PMREMGenerator(renderer);
+  state.pmrem.compileEquirectangularShader();
+  // initial neutral env until the chosen HDRI environment loads
+  scene.environment = state.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(40, 64),
@@ -1109,6 +1153,7 @@ function mount(container) {
   renderer.domElement.style.touchAction = "pan-y";
 
   Object.assign(state, { renderer, scene, camera, controls });
+  applyEnvironment(state.envId || "gray");  // designed studio set (HDRI + rig)
 
   state.resizeObserver = new ResizeObserver(resize);
   state.resizeObserver.observe(container);
@@ -1393,6 +1438,71 @@ function playReveal() {
   });
 }
 
+// vertical two-stop gradient backdrop as a CanvasTexture (clean, controllable
+// cyclorama look independent of the HDRI, which lights + reflects the car)
+function gradientTexture(top, bottom) {
+  const c = document.createElement("canvas");
+  c.width = 8; c.height = 512;
+  const x = c.getContext("2d");
+  const g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, top); g.addColorStop(1, bottom);
+  x.fillStyle = g; x.fillRect(0, 0, 8, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// load an HDRI as a prefiltered PMREM env map (cached), + the raw equirect for
+// use as a sky background
+const _envCache = {};
+function loadHDRI(file, cb) {
+  if (_envCache[file]) { cb(_envCache[file]); return; }
+  new RGBELoader().setPath("assets/env/").load(file, (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const pm = state.pmrem.fromEquirectangular(tex).texture;
+    _envCache[file] = { pmrem: pm, equirect: tex };
+    cb(_envCache[file]);
+  });
+}
+
+function applyEnvironment(id) {
+  const e = ENVIRONMENTS.find((x) => x.id === id) || ENVIRONMENTS[0];
+  if (!state.renderer) { state.envId = e.id; return; }
+  state.envId = e.id;
+  const sc = state.scene;
+  // backdrop: gradient cyclorama or the HDRI sky
+  if (e.bg.grad) {
+    const bg = gradientTexture(e.bg.grad[0], e.bg.grad[1]);
+    sc.background = bg;
+    if (sc.fog) sc.fog.color.set(e.fog[0]);
+  }
+  if (sc.fog) { sc.fog.color.set(e.fog[0]); sc.fog.near = e.fog[1]; sc.fog.far = e.fog[2]; }
+  state.renderer.toneMappingExposure = e.exposure;
+  // floor
+  if (state.floorMat) {
+    state.floorMat.color.set(e.floor.color);
+    state.floorMat.roughness = e.floor.roughness;
+    state.floorMat.metalness = e.floor.metalness;
+    state.floorMat.envMapIntensity = e.floor.env;
+    state.floorMat.needsUpdate = true;
+  }
+  // light rig
+  const setL = (l, cfg) => { if (l) { l.color.set(cfg[0]); l.intensity = cfg[1]; } };
+  setL(state.keyLight, e.rig.key);
+  setL(state.fillLight, e.rig.fill);
+  setL(state.rimLight, e.rig.rim);
+  // HDRI env map (async) — reflections + image-based light; sky bg if asked
+  loadHDRI(e.hdri, (env) => {
+    if (state.envId !== e.id) return; // switched again mid-load
+    sc.environment = env.pmrem;
+    if (e.bg.hdri) sc.background = env.equirect;
+    state.envBackground = sc.background;
+    if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
+  });
+  state.envBackground = sc.background;
+  if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
+}
+
 function resize() {
   if (!state.renderer || !state.container) return;
   const w = state.container.clientWidth || 800;
@@ -1459,6 +1569,9 @@ window.VIEWER3D = {
   fleet: FLEET,
   credit: "",
   zones: ZONES,
+  environments: ENVIRONMENTS.map((e) => ({ id: e.id, name: e.name })),
+  get environment() { return state.envId; },
+  setEnvironment(id) { applyEnvironment(id); },
   get carReady() { return state.carReady; },
   loadCar(idOrCfg) {
     const cfg = typeof idOrCfg === "string" ? FLEET.find((f) => f.id === idOrCfg) : idOrCfg;
