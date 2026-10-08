@@ -975,4 +975,14 @@
   renderSpecs();
   renderLawSelect();
   renderLaw();
+
+  // Hüper and Edge are architectural-film brands first, so they land on the
+  // building scenes; Autobahn has no flat-glass catalog and stays on vehicles.
+  // ?space=vehicles|residential|commercial deep-links override the default.
+  // Runs after setupBSavings (which hides the building card for the vehicle
+  // boot); the queued vehicle boot bails once S.space has moved, so no car loads.
+  const SPACES = ["vehicles", "residential", "commercial"];
+  const askedSpace = (qs.get("space") || "").toLowerCase();
+  const bootSpace = SPACES.includes(askedSpace) ? askedSpace : (BCAT ? "residential" : "vehicles");
+  if (bootSpace !== "vehicles" && BCAT && BSCENES[bootSpace]) enterSpace(bootSpace);
 })();

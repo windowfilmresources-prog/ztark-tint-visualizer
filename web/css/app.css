@@ -381,3 +381,37 @@ footer {
   letter-spacing: .14em; color: #fff; background: rgba(0,0,0,.45);
   padding: 4px 9px; border-radius: 999px; pointer-events: none;
 }
+
+/* ---------- entrance: the app arrives as the intro's pane is pulled away ----------
+   intro.js adds html.zt-enter at dismiss and drops it once the stagger has run.
+   Pieces rise in reading order, so the reveal edge uncovers them already moving. */
+@keyframes ztRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes ztStage {
+  from { opacity: 0; transform: scale(.985); filter: saturate(.6) brightness(1.08); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+html.zt-enter header            { animation: ztRise .6s cubic-bezier(.2,.7,.2,1) both; }
+html.zt-enter .hero-inner > *   { animation: ztRise .65s cubic-bezier(.2,.7,.2,1) both; }
+html.zt-enter .hero-inner > :nth-child(1) { animation-delay: .06s; }
+html.zt-enter .hero-inner > :nth-child(2) { animation-delay: .12s; }
+html.zt-enter .hero-inner > :nth-child(3) { animation-delay: .18s; }
+html.zt-enter .stage-wrap       { animation: ztStage .8s cubic-bezier(.2,.7,.2,1) .16s both; }
+html.zt-enter .panel .card      { animation: ztRise .6s cubic-bezier(.2,.7,.2,1) both; }
+html.zt-enter .panel .card:nth-child(1) { animation-delay: .22s; }
+html.zt-enter .panel .card:nth-child(2) { animation-delay: .29s; }
+html.zt-enter .panel .card:nth-child(3) { animation-delay: .36s; }
+html.zt-enter .panel .card:nth-child(4) { animation-delay: .43s; }
+html.zt-enter .panel .card:nth-child(n+5) { animation-delay: .5s; }
+
+/* tactile controls: a press reads as a press */
+.veh-btn:active, .series-tabs button:active, .toggle-btn:active, .shade-chips button:active {
+  transform: scale(.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.zt-enter * { animation: none !important; }
+  .veh-btn:active, .series-tabs button:active, .toggle-btn:active, .shade-chips button:active { transform: none; }
+}
