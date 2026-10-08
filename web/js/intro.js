@@ -44,11 +44,10 @@
   }[pull];
 
   // ---------------------------------------------------------------- glass
-  // Hüper + Autobahn: the mark is already there; a brand-tinted "liquid glass"
-  // slab slides over it at a slight angle — the mark seen through it refracts
-  // (magnified, softened, tinted) — then the mark shimmers. Hüper is Nathan's
-  // spec (green glass); Autobahn plays the same beat as dark smoked tint with
-  // a red rim, i.e. literally the logo going dark under film. Edge keeps its cut.
+  // Hüper + Autobahn: the mark is already there; brand-tinted "liquid glass"
+  // crosses it at an angle — the mark seen through it refracts (magnified,
+  // softened, tinted) — then the mark shimmers. Hüper is a quick diagonal band
+  // (a flash of green); Autobahn is a red slab. Edge keeps its cut.
   // No backdrop-filter (that's what makes glass UI laggy): the slab carries its
   // own pre-filtered copy of the mark that counter-slides to stay aligned, so
   // the refraction is a static raster the GPU only has to move.
@@ -56,23 +55,29 @@
     // tint = the body (clear-ish centre); edge = thick-glass colour pooling at
     // the rim; rim = lit top edge + hairline + inner bottom shade; spec = the
     // curved top-left highlight; mag = lens magnification of the mark beneath
+    // Hüper: a band, not a slab — full-bleed liquid glass at the old heat
+    // wash's diagonal (165deg ≈ 15° off level), swept down across the mark
+    // fast: one flash of Hüper green with a lit squeegee leading edge.
     huper: {
-      ang: -7, at: 0.35, dur: 1.4, ease: "cubic-bezier(.16,.84,.84,.16)", radius: 42, wFrac: 0.5, hMul: 3.2, mag: 1.14,
-      tint: "linear-gradient(158deg,rgba(176,226,112,.30),rgba(129,189,65,.14) 50%,rgba(150,205,80,.30))",
-      edge: "inset 0 0 36px rgba(100,162,40,.58)",
-      rim: "inset 0 1.5px 0 rgba(255,255,255,.95),inset 0 0 0 1.5px rgba(255,255,255,.55),inset 0 -3px 9px rgba(50,96,16,.32)",
-      drop: "0 42px 72px -30px rgba(64,104,24,.55),0 12px 24px -14px rgba(64,104,24,.40)",
-      refract: "blur(1.5px) saturate(1.6) brightness(1.04)",
-      spec: 0.62, sheen: "rgba(255,255,255,.70)",
+      band: true, ang: -15, at: 0.36, dur: 0.66, ease: "cubic-bezier(.3,.72,.7,.28)", radius: 0, hMul: 1.9, mag: 1.12,
+      tint: "linear-gradient(180deg,rgba(118,182,50,.86),rgba(141,201,72,.66) 46%,rgba(104,168,40,.88))",
+      edge: "inset 0 0 24px rgba(60,118,14,.62)",
+      rim: "inset 0 2px 0 rgba(255,255,255,.9),inset 0 -2.5px 0 rgba(255,255,255,.98),inset 0 -9px 14px -6px rgba(255,255,255,.75)",
+      drop: "0 0 34px 4px rgba(129,189,65,.5),0 26px 60px -22px rgba(52,96,16,.6)",
+      refract: "blur(1.2px) saturate(1.7) brightness(1.08)",
+      spec: 0.0, sheenBg: "linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,0) 22%,rgba(255,255,255,0) 70%,rgba(255,255,255,.42) 100%)",
     },
+    // Autobahn: brand-red glass. (Smoked/dark glass was invisible on the black
+    // field — it read as a static logo, i.e. "unchanged".) Glass on black is
+    // only seen by its light: lit rim, edge-pooled red, glow, specular.
     autobahn: {
-      ang: -11, at: 0.30, dur: 1.1, ease: "cubic-bezier(.2,.8,.8,.2)", radius: 28, wFrac: 0.42, hMul: 1.9, mag: 1.1,
-      tint: "linear-gradient(158deg,rgba(30,30,34,.58),rgba(6,6,8,.72) 55%,rgba(34,22,22,.60))",
-      edge: "inset 0 0 28px rgba(255,60,40,.24)",
-      rim: "inset 0 1px 0 rgba(255,150,120,.80),inset 0 0 0 1px rgba(255,92,64,.62),inset 0 -3px 10px rgba(0,0,0,.55)",
-      drop: "0 0 46px -6px rgba(255,40,30,.40),0 28px 56px -22px rgba(0,0,0,.85)",
-      refract: "blur(1.8px) brightness(.56) saturate(.85)",
-      spec: 0.18, sheen: "rgba(255,255,255,.26)",
+      ang: -10, at: 0.28, dur: 1.15, ease: "cubic-bezier(.2,.8,.8,.2)", radius: 34, wFrac: 0.5, hMul: 2.15, mag: 1.12,
+      tint: "linear-gradient(158deg,rgba(255,74,52,.34),rgba(196,18,16,.18) 50%,rgba(255,96,44,.32))",
+      edge: "inset 0 0 36px rgba(255,40,24,.66)",
+      rim: "inset 0 1.5px 0 rgba(255,226,216,.95),inset 0 0 0 1.5px rgba(255,142,112,.72),inset 0 -3px 10px rgba(80,0,0,.45)",
+      drop: "0 0 64px -4px rgba(255,40,24,.58),0 0 130px -12px rgba(255,30,20,.36)",
+      refract: "blur(1.6px) saturate(1.35) brightness(1.06)",
+      spec: 0.55, sheen: "rgba(255,255,255,.62)",
     },
   };
   var glass = cfg.glass === false ? null : (GLASS[brandId] || null);
@@ -163,7 +168,7 @@
 
   var el = document.createElement("div");
   el.id = "brandIntro";
-  el.className = "bi-" + pull + (reduced ? " bi-reduced" : "");
+  el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold");
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
   var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + lockHTML("raw") + "</div>";
@@ -196,6 +201,8 @@
     "#brandIntro.bi-exit{background:transparent;cursor:default}",
     // held until the overlay has actually painted (see start below)
     "#brandIntro.bi-hold,#brandIntro.bi-hold *{animation-play-state:paused!important}",
+    // and nothing of the mark shows until it can show whole (see ready below)
+    "#brandIntro.bi-hold .bi-lock,#brandIntro.bi-hold .bi-gfr,#brandIntro.bi-hold .bi-cutblade{visibility:hidden}",
     "#brandIntro .bi-raw,#brandIntro .bi-set{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}",
     "#brandIntro .bi-set{background:" + bg + "}",
     "#brandIntro .bi-lock{position:relative;width:min(" + (pull === "cut" ? "62vw,500px" : "74vw,560px") + ");text-align:center}",
@@ -314,8 +321,9 @@
       "#brandIntro .bi-gtint{position:absolute;inset:0;background:" + glass.tint + "}",
       // rim light + specular streak along the leading edge
       "#brandIntro .bi-gsheen{position:absolute;inset:0;border-radius:inherit;box-shadow:" + glass.rim + "," + glass.edge + ";" +
-      "background:radial-gradient(120% 52% at 22% -6%,rgba(255,255,255," + glass.spec + ") 0%,rgba(255,255,255,0) 58%)," +
-      "linear-gradient(100deg,transparent 0%," + glass.sheen + " 5%,transparent 16%,transparent 82%,rgba(255,255,255,.14) 94%,transparent 100%)}",
+      "background:" + (glass.sheenBg ||
+        "radial-gradient(120% 52% at 22% -6%,rgba(255,255,255," + glass.spec + ") 0%,rgba(255,255,255,0) 58%)," +
+        "linear-gradient(100deg,transparent 0%," + glass.sheen + " 5%,transparent 16%,transparent 82%,rgba(255,255,255,.14) 94%,transparent 100%)") + "}",
       // the lanes are part of the mark here — drawn from the start
       "#brandIntro .bi-spine{stroke-dashoffset:0}"
     );
@@ -338,8 +346,11 @@
         "@keyframes biLogoIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}",
         "#brandIntro .bi-gmv{animation:biGlassMv " + gd + " " + glass.ease + " " + gat + " both}",
         "#brandIntro .bi-gin{animation:biGlassIn " + gd + " " + glass.ease + " " + gat + " both}",
-        "@keyframes biGlassMv{from{transform:translateX(calc(var(--gx,80vw) * -1))}to{transform:translateX(var(--gx,80vw))}}",
-        "@keyframes biGlassIn{from{transform:translateX(var(--gx,80vw))}to{transform:translateX(calc(var(--gx,80vw) * -1))}}",
+        glass.band
+          ? "@keyframes biGlassMv{from{transform:translateY(calc(var(--gx,80vh) * -1))}to{transform:translateY(var(--gx,80vh))}}" +
+            "@keyframes biGlassIn{from{transform:translateY(var(--gx,80vh))}to{transform:translateY(calc(var(--gx,80vh) * -1))}}"
+          : "@keyframes biGlassMv{from{transform:translateX(calc(var(--gx,80vw) * -1))}to{transform:translateX(var(--gx,80vw))}}" +
+            "@keyframes biGlassIn{from{transform:translateX(var(--gx,80vw))}to{transform:translateX(calc(var(--gx,80vw) * -1))}}",
         // a fuller shimmer for these: wider, brighter, a touch slower
         "#brandIntro .bi-glint span{width:38%}"
       );
@@ -446,14 +457,26 @@
       var mw = lock.querySelector(".bi-markwrap"), rd = lock.querySelector(".bi-road");
       var top = lock.offsetTop + (rd ? rd.offsetTop : mw.offsetTop);
       var bot = lock.offsetTop + mw.offsetTop + mw.offsetHeight;
-      var cw = Math.max(150, lock.offsetWidth * glass.wFrac);
-      var ch = Math.max(120, (bot - top) * glass.hMul);
-      var fw = vw * 1.24;
+      var fw = vw * 1.24, fh = vh * 1.24;
+      var my = (top + bot) / 2;                                   // mark centre (viewport y)
+      var cw, ch, ct, gx;
+      if (glass.band) {
+        var a = Math.abs(glass.ang) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+        ch = Math.max(84, (bot - top) * glass.hMul);
+        cw = 2 * (vw / 2 * c + vh / 2 * sn) + 80;                 // long enough to bleed off both ends, any aspect
+        ct = fh / 2 + (my - vh / 2) * c - ch / 2;                  // rest position: centred on the mark
+        gx = vw / 2 * sn + vh / 2 * c + Math.abs(my - vh / 2) + ch / 2 + 24; // fully off-screen at both ends
+      } else {
+        cw = Math.max(150, lock.offsetWidth * glass.wFrac);
+        ch = Math.max(120, (bot - top) * glass.hMul);
+        ct = my + vh * 0.12 - ch / 2;
+        gx = fw / 2 + cw;                                          // starts and ends fully off-screen
+      }
       el.style.setProperty("--cw", cw.toFixed(1) + "px");
       el.style.setProperty("--ch", ch.toFixed(1) + "px");
       el.style.setProperty("--cl", (fw / 2 - cw / 2).toFixed(1) + "px");
-      el.style.setProperty("--ct", ((top + bot) / 2 + vh * 0.12 - ch / 2).toFixed(1) + "px");
-      el.style.setProperty("--gx", (fw / 2 + cw).toFixed(1) + "px");  // starts and ends fully off-screen
+      el.style.setProperty("--ct", ct.toFixed(1) + "px");
+      el.style.setProperty("--gx", gx.toFixed(1) + "px");
     };
     placeGlass();
     window.addEventListener("resize", placeGlass);
@@ -479,6 +502,40 @@
     placeBlade();
     window.addEventListener("resize", placeBlade);
   }
+
+  // ---------------------------------------------------------------- ready
+  // Nothing moves until the mark can be seen: on a cold or hammered load the
+  // logo arrives late, and the glass/blade would play across an empty field.
+  // Ready = every logo decoded (the <img>s, plus the URL itself for the
+  // CSS background/mask copies) and the tagline face loaded. Capped, so a
+  // dead asset delays the opener but never strands the site behind it. A tab
+  // opened in the background holds until it's looked at (decode() waits for
+  // that anyway) — the opener plays for the viewer, not for an empty room.
+  var READY_CAP = 4000;
+  function whenVisible(fn) {
+    if (!document.hidden) return fn();
+    document.addEventListener("visibilitychange", function on() {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", on);
+      fn();
+    });
+  }
+  var ready = new Promise(function (res) {
+    var waits = [];
+    var pre = new Image();
+    pre.src = cfg.logo;
+    el.querySelectorAll("img").forEach(function (im) { waits.push(im); });
+    waits.push(pre);
+    var jobs = waits.map(function (im) {
+      if (im.decode) return im.decode().catch(function () {});
+      return new Promise(function (r) { if (im.complete) r(); else { im.onload = im.onerror = r; } });
+    });
+    if (document.fonts && document.fonts.load) {
+      try { jobs.push(document.fonts.load("600 14px " + font).catch(function () {})); } catch (e) {}
+    }
+    Promise.all(jobs).then(res);
+    whenVisible(function () { setTimeout(res, READY_CAP); });
+  });
 
   // ---------------------------------------------------------------- lifecycle
   var done = false;
@@ -512,7 +569,7 @@
     if (!reduced && dt >= T.exit * 1000) {
       // freeze the main timeline at its end, then scrub the exit itself
       var EXIT_ANIMS = /^bi(XW[df]|XI[df]|CutClose|BladeOut)$/;
-      requestAnimationFrame(function () {
+      ready.then(function () { el.classList.remove("bi-hold"); requestAnimationFrame(function () {
         el.getAnimations({ subtree: true }).forEach(function (a) {
           try { a.finish(); } catch (e) { a.pause(); } // infinite (streaks) can't finish
         });
@@ -525,20 +582,19 @@
             a.pause();
           });
         });
-      });
+      }); });
     } else {
-      requestAnimationFrame(freeze);
+      ready.then(function () { el.classList.remove("bi-hold"); requestAnimationFrame(freeze); });
     }
   } else if (reduced) {
-    setTimeout(dismiss, 1100);
+    ready.then(function () { setTimeout(dismiss, 1100); });
   } else {
-    // Hold the timeline until the overlay has really painted: on a busy load
-    // (Autobahn pulls in the 3D engine) the first frames can arrive late, and
-    // an already-running clock would skip straight past the glare and the
-    // pull. Two frames = painted. rAF can stall in embedded iframes, so a
-    // timer races it; either way the clock — and the auto-dismiss — start
-    // together, so the intro always plays in full.
-    el.classList.add("bi-hold");
+    // Hold the timeline until the mark is ready AND the overlay has really
+    // painted: on a busy load (Autobahn pulls in the 3D engine) the first
+    // frames can arrive late, and an already-running clock would skip straight
+    // past the opening. Two frames = painted. rAF can stall in embedded
+    // iframes, so a timer races it; either way the clock — and the
+    // auto-dismiss — start together, so the intro always plays in full.
     var started = false;
     var start = function () {
       if (started) return;
@@ -546,7 +602,12 @@
       el.classList.remove("bi-hold");
       if (!done) setTimeout(dismiss, T.exit * 1000);
     };
-    requestAnimationFrame(function () { requestAnimationFrame(start); });
-    setTimeout(start, 700);
+    ready.then(function () {
+      whenVisible(function () {
+        if (done) return;
+        requestAnimationFrame(function () { requestAnimationFrame(start); });
+        setTimeout(start, 700);
+      });
+    });
   }
 })();
