@@ -43,6 +43,48 @@
                sub: 1.30, glint: 1.80, exit: 2.55, exitDur: 0.55 },
   }[pull];
 
+  // ---------------------------------------------------------------- glass
+  // Hüper + Autobahn: the mark is already there; a brand-tinted "liquid glass"
+  // slab slides over it at a slight angle — the mark seen through it refracts
+  // (magnified, softened, tinted) — then the mark shimmers. Hüper is Nathan's
+  // spec (green glass); Autobahn plays the same beat as dark smoked tint with
+  // a red rim, i.e. literally the logo going dark under film. Edge keeps its cut.
+  // No backdrop-filter (that's what makes glass UI laggy): the slab carries its
+  // own pre-filtered copy of the mark that counter-slides to stay aligned, so
+  // the refraction is a static raster the GPU only has to move.
+  var GLASS = {
+    // tint = the body (clear-ish centre); edge = thick-glass colour pooling at
+    // the rim; rim = lit top edge + hairline + inner bottom shade; spec = the
+    // curved top-left highlight; mag = lens magnification of the mark beneath
+    huper: {
+      ang: -7, at: 0.35, dur: 1.4, ease: "cubic-bezier(.16,.84,.84,.16)", radius: 42, wFrac: 0.5, hMul: 3.2, mag: 1.14,
+      tint: "linear-gradient(158deg,rgba(176,226,112,.30),rgba(129,189,65,.14) 50%,rgba(150,205,80,.30))",
+      edge: "inset 0 0 36px rgba(100,162,40,.58)",
+      rim: "inset 0 1.5px 0 rgba(255,255,255,.95),inset 0 0 0 1.5px rgba(255,255,255,.55),inset 0 -3px 9px rgba(50,96,16,.32)",
+      drop: "0 42px 72px -30px rgba(64,104,24,.55),0 12px 24px -14px rgba(64,104,24,.40)",
+      refract: "blur(1.5px) saturate(1.6) brightness(1.04)",
+      spec: 0.62, sheen: "rgba(255,255,255,.70)",
+    },
+    autobahn: {
+      ang: -11, at: 0.30, dur: 1.1, ease: "cubic-bezier(.2,.8,.8,.2)", radius: 28, wFrac: 0.42, hMul: 1.9, mag: 1.1,
+      tint: "linear-gradient(158deg,rgba(30,30,34,.58),rgba(6,6,8,.72) 55%,rgba(34,22,22,.60))",
+      edge: "inset 0 0 28px rgba(255,60,40,.24)",
+      rim: "inset 0 1px 0 rgba(255,150,120,.80),inset 0 0 0 1px rgba(255,92,64,.62),inset 0 -3px 10px rgba(0,0,0,.55)",
+      drop: "0 0 46px -6px rgba(255,40,30,.40),0 28px 56px -22px rgba(0,0,0,.85)",
+      refract: "blur(1.8px) brightness(.56) saturate(.85)",
+      spec: 0.18, sheen: "rgba(255,255,255,.26)",
+    },
+  };
+  var glass = cfg.glass === false ? null : (GLASS[brandId] || null);
+  if (glass) {
+    var gEnd = glass.at + glass.dur;
+    T = {
+      glint: gEnd - 0.14,            // shimmer chases the glass off the mark
+      rule: gEnd + 0.04, sub: gEnd + 0.18,
+      exit: gEnd + 1.3, exitDur: pull === "forward" ? 0.55 : 0.62,
+    };
+  }
+
   // ---------------------------------------------------------------- markup
   var ROAD_SVG =
     '<div class="bi-road" aria-hidden="true"><svg class="bi-lane bi-lane0" viewBox="0 0 1200 348"><defs><mask id="biM0"><path d="M 191 393 L 161 330 L 152 312 L 148 294 L 144 276 L 143 258 L 144 240 L 147 222 L 154 204 L 162 186 L 176 168 L 192 150 L 214 132 L 242 114 L 340 82 L 370 73 L 400 66 L 430 61 L 460 58 L 490 54 L 520 52 L 550 50 L 580 48 L 610 47 L 640 46 L 670 46 L 700 46 L 730 47 L 760 48 L 810 48" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="310" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine0"/></mask></defs><g mask="url(#biM0)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M5455 3059 c-1083 -30 -2107 -165 -2817 -370 -919 -265 -1573 -655 -2043 -1219 -222 -267 -421 -682 -476 -994 -20 -114 -26 -285 -10 -302 6 -5 573 -8 1512 -6 l1502 2 -49 53 c-100 106 -361 487 -441 644 -360 703 48 1361 1057 1706 717 246 1827 370 3555 397 761 12 845 17 585 36 -749 54 -1633 74 -2375 53z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane1" viewBox="0 0 1200 348"><defs><mask id="biM1"><path d="M 356 211 L 425 221 L 450 224 L 475 228 L 500 224 L 525 219 L 550 205 L 575 202 L 600 204 L 625 203 L 650 201 L 675 192 L 651 115 L 670 100 L 699 85 L 800 68 L 825 66 L 850 65 L 875 64 L 900 64 L 925 64 L 950 64 L 1000 65" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="320" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine1"/></mask></defs><g mask="url(#biM1)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M7640 2883 c-30 -1 -152 -7 -270 -13 -384 -19 -1125 -79 -1435 -116 -358 -42 -569 -101 -605 -168 -6 -13 -13 -48 -14 -79 -3 -75 -16 -87 -144 -138 -699 -278 -1037 -680 -991 -1180 30 -322 242 -676 579 -968 l65 -56 1284 3 1285 2 -210 126 c-708 424 -1124 775 -1220 1029 -101 271 -67 447 126 636 391 382 1084 631 2140 768 396 51 991 91 1380 91 420 1 205 22 -560 55 -290 13 -1218 18 -1410 8z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane2" viewBox="0 0 1200 348"><defs><mask id="biM2"><path d="M 1250 334 L 1180 328 L 1155 326 L 1130 324 L 1105 322 L 1080 320 L 1055 302 L 1030 290 L 1005 281 L 980 274 L 955 269 L 930 264 L 905 261 L 880 256 L 855 252 L 830 248 L 805 242 L 780 231 L 755 213 L 730 204 L 705 200 L 680 195 L 655 191 L 606 183" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="300" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine2"/></mask></defs><g mask="url(#biM2)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M9605 2704 c-33 -2 -152 -8 -265 -14 -1070 -56 -2197 -307 -2606 -580 -106 -71 -250 -218 -292 -297 -53 -101 -59 -261 -15 -398 110 -341 527 -714 1280 -1145 l191 -110 2051 0 c1195 0 2051 4 2051 9 0 5 -10 11 -22 14 -31 8 -282 56 -343 67 -398 68 -1052 192 -1900 361 -1106 220 -1764 482 -2091 832 -121 128 -153 267 -93 397 85 182 418 394 830 528 464 151 1174 259 1918 292 130 6 265 14 301 18 l65 6 -100 7 c-119 8 -874 18 -960 13z" fill="#ffcf00"/></g></g></g></svg></div>';
@@ -51,6 +93,8 @@
 
   // the mark itself — identical structure in both layers so the raw (glare)
   // and set (filmed) marks sit pixel-for-pixel on top of each other
+  var LOGO_DIMS = { "assets/intro-huper-word.png": [765, 125], "assets/plate-autobahn.png": [1200, 208] };
+  var dimAttr = LOGO_DIMS[cfg.logo] ? ' width="' + LOGO_DIMS[cfg.logo][0] + '" height="' + LOGO_DIMS[cfg.logo][1] + '"' : "";
   function markHTML(layer) {
     var glint = layer === "set"
       ? '<div class="bi-glint" style="-webkit-mask-image:url(\'' + cfg.logo + '\');mask-image:url(\'' + cfg.logo + '\')"><span></span></div>'
@@ -59,7 +103,7 @@
       return '<div class="bi-markwrap"><div class="bi-mark" style="background-image:url(\'' + cfg.logo + '\')"></div>' + glint + "</div>";
     }
     return '<div class="bi-markwrap bi-markwrap-word">' +
-      '<img class="bi-mark-img" src="' + cfg.logo + '" alt="" draggable="false">' + glint + "</div>";
+      '<img class="bi-mark-img" src="' + cfg.logo + '"' + dimAttr + ' alt="" draggable="false">' + glint + "</div>";
   }
 
   function subHTML() {
@@ -77,7 +121,10 @@
     // the lanes live in the set layer ONLY: their masks use fixed ids, and a
     // second copy would make url(#biM0) resolve to the raw layer's unanimated
     // mask. The raw layer keeps an empty box so both lockups stay aligned.
-    var road = cfg.roadVector ? (layer === "set" ? ROAD_SVG : '<div class="bi-road"></div>') : "";
+    var road = !cfg.roadVector ? "" :
+      layer === "set" ? ROAD_SVG :
+      layer === "copy" ? ROAD_SVG.replace(/biM(\d)/g, "biMg$1") :
+      '<div class="bi-road"></div>';
     return '<div class="bi-lock">' +
       road +
       markHTML(layer) +
@@ -122,7 +169,14 @@
   var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + lockHTML("raw") + "</div>";
   var setHTML = '<div class="bi-set">' + lockHTML("set") + "</div>";
   var skipHTML = '<div class="bi-skip">Click to skip</div>';
-  el.innerHTML = pull === "cut"
+  var glassHTML = glass
+    ? '<div class="bi-gfr"><div class="bi-gmv"><div class="bi-gcard">' +
+      '<div class="bi-gin"><div class="bi-gj">' + lockHTML("copy") + "</div></div>" +
+      '<div class="bi-gtint"></div><div class="bi-gsheen"></div></div></div></div>'
+    : "";
+  el.innerHTML = glass
+    ? '<div class="bi-pane">' + win("x", setHTML + glassHTML + skipHTML) + "</div>" + bladeHTML("out")
+    : pull === "cut"
     ? heatFx + '<div class="bi-pane">' + rawHTML + setHTML + skipHTML + "</div>" + '<div class="bi-cutblade"></div>'
     : heatFx + '<div class="bi-pane">' + win("x", rawHTML + win("r", setHTML) + skipHTML) + "</div>" +
       bladeHTML("in") + bladeHTML("out");
@@ -240,6 +294,33 @@
     );
   }
 
+  // ---- glass slab (geometry comes from placeGlass() as px custom properties)
+  if (glass) {
+    var ga = glass.ang + "deg";
+    R.push(
+      // frame = viewport + 12% bleed, rotated to the slab's angle
+      "#brandIntro .bi-gfr{position:absolute;left:-12vw;top:-12vh;width:124vw;height:124vh;z-index:3;pointer-events:none;" +
+      "transform:rotate(" + ga + ");transform-origin:50% 50%}",
+      "#brandIntro .bi-gmv{position:absolute;inset:0;will-change:transform}",
+      "#brandIntro .bi-gcard{position:absolute;left:var(--cl,40vw);top:var(--ct,40vh);width:var(--cw,30vw);height:var(--ch,30vh);" +
+      "border-radius:" + glass.radius + "px;overflow:hidden;box-shadow:" + glass.drop + "}",
+      // the counter-sliding view: lines the copy up with the real mark underneath
+      "#brandIntro .bi-gin{position:absolute;left:calc(var(--cl,40vw) * -1);top:calc(var(--ct,40vh) * -1);width:124vw;height:124vh;will-change:transform}",
+      "#brandIntro .bi-gj{position:absolute;left:12vw;top:12vh;width:100vw;height:100vh;background:" + bg + ";" +
+      "display:flex;align-items:center;justify-content:center;transform:rotate(" + (-glass.ang) + "deg);transform-origin:50% 50%}",
+      // refraction: the mark through thick glass — magnified, softened, tinted
+      "#brandIntro .bi-gj .bi-lock{filter:" + glass.refract + ";transform:scale(" + glass.mag + ")}",
+      "#brandIntro .bi-gj .bi-rule,#brandIntro .bi-gj .bi-sub{visibility:hidden}",
+      "#brandIntro .bi-gtint{position:absolute;inset:0;background:" + glass.tint + "}",
+      // rim light + specular streak along the leading edge
+      "#brandIntro .bi-gsheen{position:absolute;inset:0;border-radius:inherit;box-shadow:" + glass.rim + "," + glass.edge + ";" +
+      "background:radial-gradient(120% 52% at 22% -6%,rgba(255,255,255," + glass.spec + ") 0%,rgba(255,255,255,0) 58%)," +
+      "linear-gradient(100deg,transparent 0%," + glass.sheen + " 5%,transparent 16%,transparent 82%,rgba(255,255,255,.14) 94%,transparent 100%)}",
+      // the lanes are part of the mark here — drawn from the start
+      "#brandIntro .bi-spine{stroke-dashoffset:0}"
+    );
+  }
+
   // ---- motion (skipped wholesale for reduced motion)
   if (!reduced) {
     var p = T.pull + "s", pd = T.pullDur + "s";
@@ -248,7 +329,21 @@
       "#brandIntro .bi-glare{animation:biGlare 1.4s " + out + " both}",
       "@keyframes biGlare{from{opacity:.55;transform:scale(1.08)}to{opacity:1;transform:scale(1)}}"
     );
-    if (pull === "down") {
+    if (glass) {
+      var gd = glass.dur + "s", gat = glass.at + "s";
+      R.push(
+        // the mark settles in, then the slab crosses it — lingering over the
+        // mark mid-pass — while its view counter-slides by the same amount
+        "#brandIntro .bi-set .bi-lock{animation:biLogoIn .6s " + out + " both}",
+        "@keyframes biLogoIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}",
+        "#brandIntro .bi-gmv{animation:biGlassMv " + gd + " " + glass.ease + " " + gat + " both}",
+        "#brandIntro .bi-gin{animation:biGlassIn " + gd + " " + glass.ease + " " + gat + " both}",
+        "@keyframes biGlassMv{from{transform:translateX(calc(var(--gx,80vw) * -1))}to{transform:translateX(var(--gx,80vw))}}",
+        "@keyframes biGlassIn{from{transform:translateX(var(--gx,80vw))}to{transform:translateX(calc(var(--gx,80vw) * -1))}}",
+        // a fuller shimmer for these: wider, brighter, a touch slower
+        "#brandIntro .bi-glint span{width:38%}"
+      );
+    } else if (pull === "down") {
       R.push(
         "#brandIntro .bi-rw{animation:biRWd " + pd + " " + ease + " " + p + " both}",
         "#brandIntro .bi-ri{animation:biRId " + pd + " " + ease + " " + p + " both}",
@@ -331,7 +426,7 @@
   } else {
     // reduced motion: no pull, no blade — the finished lockup, then a fade
     R.push(
-      "#brandIntro .bi-raw,#brandIntro .bi-bfr,#brandIntro .bi-cutblade{display:none}",
+      "#brandIntro .bi-raw,#brandIntro .bi-bfr,#brandIntro .bi-cutblade,#brandIntro .bi-gfr{display:none}",
       "#brandIntro .bi-glint,#brandIntro .bi-skip{display:none}",
       "#brandIntro .bi-sub span{opacity:.85}",
       "#brandIntro{transition:opacity .35s ease}#brandIntro.bi-exit{opacity:0}"
@@ -341,6 +436,30 @@
   css.textContent = R.join("");
   document.head.appendChild(css);
   document.documentElement.appendChild(el);
+
+  if (glass) {
+    var placeGlass = function () {
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var set = el.querySelector(".bi-set");
+      var lock = set && set.querySelector(".bi-lock");
+      if (!lock) return;
+      var mw = lock.querySelector(".bi-markwrap"), rd = lock.querySelector(".bi-road");
+      var top = lock.offsetTop + (rd ? rd.offsetTop : mw.offsetTop);
+      var bot = lock.offsetTop + mw.offsetTop + mw.offsetHeight;
+      var cw = Math.max(150, lock.offsetWidth * glass.wFrac);
+      var ch = Math.max(120, (bot - top) * glass.hMul);
+      var fw = vw * 1.24;
+      el.style.setProperty("--cw", cw.toFixed(1) + "px");
+      el.style.setProperty("--ch", ch.toFixed(1) + "px");
+      el.style.setProperty("--cl", (fw / 2 - cw / 2).toFixed(1) + "px");
+      el.style.setProperty("--ct", ((top + bot) / 2 + vh * 0.12 - ch / 2).toFixed(1) + "px");
+      el.style.setProperty("--gx", (fw / 2 + cw).toFixed(1) + "px");  // starts and ends fully off-screen
+    };
+    placeGlass();
+    window.addEventListener("resize", placeGlass);
+    var gimg = el.querySelector(".bi-set .bi-mark-img");
+    if (gimg && !gimg.complete) gimg.addEventListener("load", placeGlass, { once: true });
+  }
 
   // Edge: the blade has to land exactly on the logo's own strike, so measure
   // the rendered mark and hand the geometry to the CSS
