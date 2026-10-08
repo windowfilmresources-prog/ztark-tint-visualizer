@@ -86,22 +86,26 @@
       "</div>";
   }
 
-  // the squeegee: drawn in a 0..100 viewBox stretched over the viewport, with
-  // non-scaling strokes, so the line lands exactly on the clip-path edge at
-  // any aspect ratio while keeping a constant pixel thickness
-  function bladeSVG() {
-    var line = pull === "forward" ? 'x1="7" y1="0" x2="0" y2="100"' : 'x1="0" y1="0" x2="100" y2="6"';
-    return '<svg class="bi-blade" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
-      '<line ' + line + ' class="bi-b-glow" vector-effect="non-scaling-stroke"/>' +
-      '<line ' + line + ' class="bi-b-core" vector-effect="non-scaling-stroke"/>' +
-      "</svg>";
+  // GPU-only pull (Hüper + Autobahn). A rotated frame fixes the edge angle; in
+  // it an overflow:hidden window slides while its contents counter-slide, so
+  // the contents hold still on screen and only the window's edge travels.
+  // Nothing but transforms animate, so the stroke runs on the compositor and
+  // stays smooth while the page boots underneath — the old clip-path pull ran
+  // on the main thread and got starved by Autobahn's 3D engine load.
+  //   kind "r" = the film going on (reveals the set layer)
+  //   kind "x" = the exit (takes the whole pane away)
+  function win(kind, content) {
+    return '<div class="bi-wr"><div class="bi-ww bi-' + kind + 'w"><div class="bi-wi bi-' + kind + 'i">' +
+      '<div class="bi-wj">' + content + "</div></div></div></div>";
+  }
+  // the squeegee itself: a lit bar riding the window's edge in the same frame
+  function bladeHTML(kind) {
+    return '<div class="bi-wr bi-bfr"><div class="bi-bm bi-b' + kind + '"><i class="bi-bar"></i></div></div>';
   }
 
   var heatFx = cfg.heat
     ? '<svg class="bi-defs" width="0" height="0" aria-hidden="true"><filter id="biHeatFx" x="-5%" y="-20%" width="110%" height="140%">' +
-      '<feTurbulence type="fractalNoise" baseFrequency="0.010 0.050" numOctaves="2" seed="7" result="n">' +
-      '<animate attributeName="baseFrequency" dur="1.6s" values="0.010 0.050;0.014 0.068;0.010 0.050" repeatCount="indefinite"/>' +
-      "</feTurbulence>" +
+      '<feTurbulence type="fractalNoise" baseFrequency="0.010 0.050" numOctaves="2" seed="7" result="n"/>' +
       '<feDisplacementMap in="SourceGraphic" in2="n" scale="11" xChannelSelector="R" yChannelSelector="G"/></filter></svg>'
     : "";
 
@@ -115,14 +119,13 @@
   el.className = "bi-" + pull + (reduced ? " bi-reduced" : "");
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
-  el.innerHTML =
-    heatFx +
-    '<div class="bi-pane">' +
-    '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + lockHTML("raw") + "</div>" +
-    '<div class="bi-set">' + lockHTML("set") + "</div>" +
-    '<div class="bi-skip">Click to skip</div>' +
-    "</div>" +
-    (pull === "cut" ? '<div class="bi-cutblade"></div>' : bladeSVG());
+  var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + lockHTML("raw") + "</div>";
+  var setHTML = '<div class="bi-set">' + lockHTML("set") + "</div>";
+  var skipHTML = '<div class="bi-skip">Click to skip</div>';
+  el.innerHTML = pull === "cut"
+    ? heatFx + '<div class="bi-pane">' + rawHTML + setHTML + skipHTML + "</div>" + '<div class="bi-cutblade"></div>'
+    : heatFx + '<div class="bi-pane">' + win("x", rawHTML + win("r", setHTML) + skipHTML) + "</div>" +
+      bladeHTML("in") + bladeHTML("out");
 
   // ---------------------------------------------------------------- styles
   var ease = "cubic-bezier(.62,.02,.28,1)"; // grip, drive, settle — a real squeegee stroke
@@ -137,6 +140,8 @@
     "#brandIntro .bi-pane{position:absolute;inset:0}",
     // once the exit starts the root goes clear so the app shows through
     "#brandIntro.bi-exit{background:transparent;cursor:default}",
+    // held until the overlay has actually painted (see start below)
+    "#brandIntro.bi-hold,#brandIntro.bi-hold *{animation-play-state:paused!important}",
     "#brandIntro .bi-raw,#brandIntro .bi-set{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}",
     "#brandIntro .bi-set{background:" + bg + "}",
     "#brandIntro .bi-lock{position:relative;width:min(" + (pull === "cut" ? "62vw,500px" : "74vw,560px") + ");text-align:center}",
@@ -172,7 +177,7 @@
       "#brandIntro .bi-glare{position:absolute;inset:-10%;" +
       "background:radial-gradient(60% 55% at 72% 16%,#fffaf0 0%,#ffe2b4 26%,rgba(255,196,120,.85) 50%,rgba(246,214,170,.0) 80%)," +
       "radial-gradient(90% 70% at 20% 90%,rgba(255,170,90,.45),transparent 70%)}",
-      "#brandIntro .bi-raw .bi-lock{filter:url(#biHeatFx)}",
+      "#brandIntro .bi-raw .bi-lock{filter:url(#biHeatFx);will-change:transform}",
       "#brandIntro .bi-raw .bi-mark-img{filter:brightness(1.55) contrast(.5) saturate(.4) blur(.8px);opacity:.8}",
       "#brandIntro .bi-raw .bi-rule,#brandIntro .bi-raw .bi-sub{visibility:hidden}"
     );
@@ -208,13 +213,30 @@
       "box-shadow:0 0 0 0 rgba(13,27,61,0)}"
     );
   } else {
+    // frame is 124% of the viewport (inset -12%) so it still covers after
+    // rotating; .bi-wj maps back to exactly the viewport: 12/124, 100/124
+    var ang = (pull === "forward" ? 6 : 2.6) + "deg";
+    var vert = pull === "forward"; // edge runs vertically (sweeps sideways)
     R.push(
-      "#brandIntro .bi-blade{position:absolute;inset:0;width:100%;height:100%;z-index:4;overflow:visible;pointer-events:none;" +
+      "#brandIntro .bi-wr{position:absolute;inset:-12%;transform:rotate(" + ang + ");transform-origin:50% 50%;pointer-events:none}",
+      "#brandIntro .bi-ww{position:absolute;inset:0;overflow:hidden}",
+      "#brandIntro .bi-wi{position:absolute;inset:0}",
+      "#brandIntro .bi-wj{position:absolute;left:9.6774%;top:9.6774%;width:80.6452%;height:80.6452%;" +
+      "transform:rotate(-" + ang + ");transform-origin:50% 50%}",
+      "#brandIntro .bi-ww,#brandIntro .bi-wi,#brandIntro .bi-bm{will-change:transform}",
+      "#brandIntro .bi-bfr{z-index:4}",
+      "#brandIntro .bi-bm{position:absolute;inset:0}",
+      "#brandIntro .bi-bar{position:absolute;display:block;border-radius:2px;" +
+      (vert ? "top:0;bottom:0;width:2px;" : "left:0;right:0;height:2.5px;") +
+      "background:" + (dark ? "#fff3ee" : "#ffffff") + ";box-shadow:" +
       (dark
-        ? "filter:drop-shadow(0 0 6px rgba(255,90,60,.9)) drop-shadow(0 0 18px rgba(255,40,30,.45))}"
-        : "filter:drop-shadow(0 0 7px rgba(255,255,255,.95)) drop-shadow(0 1.5px 0 rgba(96,72,48,.32))}"),
-      "#brandIntro .bi-b-glow{stroke:" + (dark ? "rgba(255,90,60,.35)" : "rgba(255,255,255,.55)") + ";stroke-width:" + (dark ? 9 : 10) + "px}",
-      "#brandIntro .bi-b-core{stroke:" + (dark ? "#fff3ee" : "#ffffff") + ";stroke-width:" + (dark ? 2 : 2.5) + "px}"
+        ? "0 0 6px 1px rgba(255,90,60,.9),0 0 22px 5px rgba(255,40,30,.45)}"
+        : "0 0 7px 1px rgba(255,255,255,.95),0 0 20px 5px rgba(255,255,255,.55),0 1.5px 0 rgba(96,72,48,.3)}"),
+      // entry bar rides the window's leading edge; exit bar rides its trailing edge
+      vert
+        ? "#brandIntro .bi-bin .bi-bar{right:0;transform:translateX(50%)}#brandIntro .bi-bout .bi-bar{left:0;transform:translateX(-50%)}"
+        : "#brandIntro .bi-bin .bi-bar{bottom:0;transform:translateY(50%)}#brandIntro .bi-bout .bi-bar{top:0;transform:translateY(-50%)}",
+      "#brandIntro .bi-bout{opacity:0}#brandIntro.bi-exit .bi-bout{opacity:1}"
     );
   }
 
@@ -228,17 +250,22 @@
     );
     if (pull === "down") {
       R.push(
-        "#brandIntro .bi-set{animation:biPullDown " + pd + " " + ease + " " + p + " both}",
-        "#brandIntro .bi-blade{animation:biBladeDown " + pd + " " + ease + " " + p + " both}",
-        "@keyframes biPullDown{from{clip-path:polygon(0 0,100% 0,100% -6%,0 -12%)}to{clip-path:polygon(0 0,100% 0,100% 112%,0 106%)}}",
-        "@keyframes biBladeDown{from{transform:translateY(-12%)}to{transform:translateY(106%)}}"
+        "#brandIntro .bi-rw{animation:biRWd " + pd + " " + ease + " " + p + " both}",
+        "#brandIntro .bi-ri{animation:biRId " + pd + " " + ease + " " + p + " both}",
+        "#brandIntro .bi-bin{animation:biRWd " + pd + " " + ease + " " + p + " both}",
+        "@keyframes biRWd{from{transform:translateY(-100%)}to{transform:translateY(0)}}",
+        "@keyframes biRId{from{transform:translateY(100%)}to{transform:translateY(0)}}",
+        // frozen heat warp still breathes: a slow composited rise
+        "#brandIntro .bi-raw .bi-lock{animation:biRise 1.3s ease-in-out infinite alternate}",
+        "@keyframes biRise{from{transform:translateY(1.5px)}to{transform:translateY(-1.5px)}}"
       );
     } else if (pull === "forward") {
       R.push(
-        "#brandIntro .bi-set{animation:biPullFwd " + pd + " " + ease + " " + p + " both}",
-        "#brandIntro .bi-blade{animation:biBladeFwd " + pd + " " + ease + " " + p + " both}",
-        "@keyframes biPullFwd{from{clip-path:polygon(0 0,-8% 0,-15% 100%,0 100%)}to{clip-path:polygon(0 0,115% 0,108% 100%,0 100%)}}",
-        "@keyframes biBladeFwd{from{transform:translateX(-15%)}to{transform:translateX(108%)}}",
+        "#brandIntro .bi-rw{animation:biRWf " + pd + " " + ease + " " + p + " both}",
+        "#brandIntro .bi-ri{animation:biRIf " + pd + " " + ease + " " + p + " both}",
+        "#brandIntro .bi-bin{animation:biRWf " + pd + " " + ease + " " + p + " both}",
+        "@keyframes biRWf{from{transform:translateX(-100%)}to{transform:translateX(0)}}",
+        "@keyframes biRIf{from{transform:translateX(100%)}to{transform:translateX(0)}}",
         // headlight streaks race past in the raw night before the pull
         "#brandIntro .bi-streak{animation:biStreak .42s cubic-bezier(.5,0,.5,1) infinite}",
         "#brandIntro .bi-streak1{animation-delay:.12s}#brandIntro .bi-streak2{animation-delay:.05s;animation-duration:.36s}" +
@@ -284,16 +311,16 @@
     // exit: the pane is pulled away the same way it went on, revealing the app
     var xd = T.exitDur + "s";
     if (pull === "down") R.push(
-      "#brandIntro.bi-exit .bi-pane{animation:biExitDown " + xd + " " + ease + " both}",
-      "#brandIntro.bi-exit .bi-blade{animation:biBladeDownX " + xd + " " + ease + " both}",
-      "@keyframes biBladeDownX{from{transform:translateY(-12%)}to{transform:translateY(106%)}}",
-      "@keyframes biExitDown{from{clip-path:polygon(0 -12%,100% -6%,100% 100%,0 100%)}to{clip-path:polygon(0 106%,100% 112%,100% 100%,0 100%)}}"
+      "#brandIntro.bi-exit .bi-xw,#brandIntro.bi-exit .bi-bout{animation:biXWd " + xd + " " + ease + " both}",
+      "#brandIntro.bi-exit .bi-xi{animation:biXId " + xd + " " + ease + " both}",
+      "@keyframes biXWd{from{transform:translateY(0)}to{transform:translateY(100%)}}",
+      "@keyframes biXId{from{transform:translateY(0)}to{transform:translateY(-100%)}}"
     );
     else if (pull === "forward") R.push(
-      "#brandIntro.bi-exit .bi-pane{animation:biExitFwd " + xd + " " + ease + " both}",
-      "#brandIntro.bi-exit .bi-blade{animation:biBladeFwdX " + xd + " " + ease + " both}",
-      "@keyframes biBladeFwdX{from{transform:translateX(-15%)}to{transform:translateX(108%)}}",
-      "@keyframes biExitFwd{from{clip-path:polygon(-8% 0,100% 0,100% 100%,-15% 100%)}to{clip-path:polygon(115% 0,100% 0,100% 100%,108% 100%)}}"
+      "#brandIntro.bi-exit .bi-xw,#brandIntro.bi-exit .bi-bout{animation:biXWf " + xd + " " + ease + " both}",
+      "#brandIntro.bi-exit .bi-xi{animation:biXIf " + xd + " " + ease + " both}",
+      "@keyframes biXWf{from{transform:translateX(0)}to{transform:translateX(100%)}}",
+      "@keyframes biXIf{from{transform:translateX(0)}to{transform:translateX(-100%)}}"
     );
     else R.push(
       "#brandIntro.bi-exit .bi-pane{animation:biCutClose " + xd + " cubic-bezier(.7,0,.25,1) both}",
@@ -304,7 +331,7 @@
   } else {
     // reduced motion: no pull, no blade — the finished lockup, then a fade
     R.push(
-      "#brandIntro .bi-raw,#brandIntro .bi-blade,#brandIntro .bi-cutblade{display:none}",
+      "#brandIntro .bi-raw,#brandIntro .bi-bfr,#brandIntro .bi-cutblade{display:none}",
       "#brandIntro .bi-glint,#brandIntro .bi-skip{display:none}",
       "#brandIntro .bi-sub span{opacity:.85}",
       "#brandIntro{transition:opacity .35s ease}#brandIntro.bi-exit{opacity:0}"
@@ -343,6 +370,7 @@
   function dismiss() {
     if (done) return;
     done = true;
+    el.classList.remove("bi-hold"); // a skip during the hold must not freeze the exit
     resolveDone(); // the app boots underneath while the pane pulls away
     // the app's panels arrive as they're uncovered (app.css .zt-enter)
     document.documentElement.classList.add("zt-enter");
@@ -364,7 +392,7 @@
     };
     if (!reduced && dt >= T.exit * 1000) {
       // freeze the main timeline at its end, then scrub the exit itself
-      var EXIT_ANIMS = /^bi(ExitDown|ExitFwd|CutClose|BladeDownX|BladeFwdX|BladeOut)$/;
+      var EXIT_ANIMS = /^bi(XW[df]|XI[df]|CutClose|BladeOut)$/;
       requestAnimationFrame(function () {
         el.getAnimations({ subtree: true }).forEach(function (a) {
           try { a.finish(); } catch (e) { a.pause(); } // infinite (streaks) can't finish
@@ -382,7 +410,24 @@
     } else {
       requestAnimationFrame(freeze);
     }
+  } else if (reduced) {
+    setTimeout(dismiss, 1100);
   } else {
-    setTimeout(dismiss, reduced ? 1100 : T.exit * 1000);
+    // Hold the timeline until the overlay has really painted: on a busy load
+    // (Autobahn pulls in the 3D engine) the first frames can arrive late, and
+    // an already-running clock would skip straight past the glare and the
+    // pull. Two frames = painted. rAF can stall in embedded iframes, so a
+    // timer races it; either way the clock — and the auto-dismiss — start
+    // together, so the intro always plays in full.
+    el.classList.add("bi-hold");
+    var started = false;
+    var start = function () {
+      if (started) return;
+      started = true;
+      el.classList.remove("bi-hold");
+      if (!done) setTimeout(dismiss, T.exit * 1000);
+    };
+    requestAnimationFrame(function () { requestAnimationFrame(start); });
+    setTimeout(start, 700);
   }
 })();
