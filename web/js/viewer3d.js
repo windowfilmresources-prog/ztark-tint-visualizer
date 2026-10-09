@@ -24,29 +24,29 @@ const ENVIRONMENTS = [
   {
     // soft clean white — a lighter gray, NOT a blown-out harsh white
     id: "white", name: "White Studio", swatch: "#ffffff", hdri: "studio_small_09.hdr",
-    bg: { grad: ["#f3f5f6", "#e3e7ea"] }, exposure: 0.98,
+    bg: { grad: ["#f3f5f6", "#e3e7ea"] }, exposure: 0.9, studio: { hdri: 0.8, top: 3.2, side: 2.4, rim: 1.8 },
     floor: { color: 0xeef0f2, roughness: 0.6, metalness: 0.0, env: 0.45 },
     rig: { key: [0xfff6ee, 1.12], fill: [0xe4ecf5, 0.45], rim: [0xffffff, 0.42] },
     fog: [0xe6e9ec, 11, 30], envInt: 0.85,
   },
   {
     id: "gray", name: "Neutral Gray", swatch: "#a8acb0", hdri: "photo_studio_01.hdr",
-    bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 1.0,
+    bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 0.92, studio: { hdri: 0.55, top: 3.6, side: 2.8, rim: 2.2 },
     floor: { color: 0xa6aaae, roughness: 0.5, metalness: 0.0, env: 0.65 },
     rig: { key: [0xfff4ea, 1.25], fill: [0xe2e8f0, 0.4], rim: [0xffffff, 0.55] },
     fog: [0xaeb2b6, 12, 32], envInt: 0.9,
   },
   {
     id: "graphite", name: "Graphite", swatch: "#26282c", hdri: "studio_small_03.hdr",
-    bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.18,
-    floor: { color: 0x1b1d20, roughness: 0.32, metalness: 0.0, env: 0.7 },
+    bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.05, studio: { hdri: 0.3, top: 4.2, side: 3.4, rim: 3.0 },
+    floor: { color: 0x1b1d20, roughness: 0.55, metalness: 0.0, env: 0.42 },
     rig: { key: [0xfff6ee, 1.55], fill: [0x9fb2cc, 0.28], rim: [0xffffff, 0.85] },
     fog: [0x191b1e, 12, 34], envInt: 1.0,
   },
   {
     id: "showroom", name: "Warm Showroom", swatch: "#6f5a43", hdri: "brown_photostudio_02.hdr",
-    bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.1,
-    floor: { color: 0x241f1b, roughness: 0.4, metalness: 0.0, env: 0.7 },
+    bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.0, studio: { hdri: 0.45, top: 3.8, side: 3.0, rim: 2.4 },
+    floor: { color: 0x241f1b, roughness: 0.55, metalness: 0.0, env: 0.48 },
     rig: { key: [0xffe9cf, 1.42], fill: [0xf0e0cc, 0.34], rim: [0xfff2e0, 0.62] },
     fog: [0x241f1b, 12, 34], envInt: 1.0,
   },
@@ -55,7 +55,7 @@ const ENVIRONMENTS = [
     // the backdrop (the raw HDRI-as-background put a hard horizon seam across
     // the flat floor). Floor tone meets the gradient's lower stop, no seam.
     id: "sky", name: "Open Sky", swatch: "#8bb0d0", hdri: "kloofendal_48d_partly_cloudy.hdr",
-    bg: { grad: ["#7ba6cf", "#cfd9e2"] }, exposure: 0.98,
+    bg: { grad: ["#7ba6cf", "#cfd9e2"] }, exposure: 0.9,
     floor: { color: 0xc2cad2, roughness: 0.5, metalness: 0.0, env: 0.55 },
     rig: { key: [0xfff5e2, 1.5], fill: [0xcfe0f5, 0.5], rim: [0xffffff, 0.4] },
     fog: [0xcdd8e2, 13, 40], envInt: 1.0,
@@ -70,6 +70,10 @@ const LAB_ZONES = {
   rear: ["WindowRear"],
   back: ["RearWindow"],
 };
+
+// studio key: high and only slightly off-axis, so its soft shadow pools under
+// the car instead of trailing off to one side
+const KEY_POS = [2.2, 8.4, 2.6];
 
 const CAR_PARAM = (new URLSearchParams(location.search).get("car") || "").replace(/[^a-z0-9_-]/gi, "");
 
@@ -608,7 +612,7 @@ function restoreCarCamera() {
   if (state.scene && !state.scene.fog) state.scene.fog = new THREE.Fog(0xf2f3f5, 10, 26);
   if (state.keyLight) {
     state.keyLight.shadow.radius = 9;
-    state.keyLight.position.set(4.5, 6.5, 3.5);
+    state.keyLight.position.set(KEY_POS[0], KEY_POS[1], KEY_POS[2]);
     state.keyLight.target.position.set(0, 0, 0);
     state.keyLight.target.updateMatrixWorld();
   }
@@ -682,12 +686,7 @@ function prepareCar(root, cfg) {
   // is paintable — heuristic name-matches (e.g. "Car_Paint_2" roof accents)
   // stay their factory color.
   for (const m of (exactPaintMats.length ? exactPaintMats : heuristicPaintMats)) {
-    m.map = null;
-    m.metalness = 0.15;
-    m.roughness = 0.52;      // satin car-paint gloss, not mirror/glass
-    m.envMapIntensity = 0.85; // HDRI sets punchier reflections; dial them back
-    m.needsUpdate = true;
-    bodyMats.push(m);
+    bodyMats.push(adoptPaint(root, m));
   }
 
   // Paint fallback: no material name matched — take the largest-surface-area
@@ -719,12 +718,7 @@ function prepareCar(root, cfg) {
     if (ranked.length) {
       const top = ranked[0][1];
       ranked.filter(([, a]) => a > top * 0.5).slice(0, 2).forEach(([m]) => {
-        m.map = null;
-        m.metalness = 0.15;
-        m.roughness = 0.52;      // satin car-paint gloss, not mirror/glass
-        m.envMapIntensity = 0.85; // HDRI sets punchier reflections; dial them back
-        m.needsUpdate = true;
-        bodyMats.push(m);
+        bodyMats.push(adoptPaint(root, m));
       });
     }
   }
@@ -916,6 +910,155 @@ function disposeCar() {
   state.carReady = false;
 }
 
+// Real automotive paint is two layers: a pigmented (lightly metallic) base
+// and a glossy clear coat on top that carries the crisp studio reflections.
+// The single satin layer read as plastic. Swap every paint material for a
+// physical one (same colour/maps) everywhere the model uses it.
+function adoptPaint(root, src) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: src.color ? src.color.clone() : new THREE.Color(0x222222),
+    metalness: 0.3, roughness: 0.44,
+    clearcoat: 1.0, clearcoatRoughness: 0.06,
+    envMapIntensity: 1.0,
+  });
+  m.name = src.name;
+  if (src.normalMap) { m.normalMap = src.normalMap; m.normalScale.copy(src.normalScale); }
+  if (src.aoMap) { m.aoMap = src.aoMap; m.aoMapIntensity = src.aoMapIntensity; }
+  m.side = src.side;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (Array.isArray(o.material)) o.material = o.material.map((x) => (x === src ? m : x));
+    else if (o.material === src) o.material = m;
+  });
+  src.dispose();
+  return m;
+}
+
+// Grounding: a contact shadow baked from the car's own shape (depth from
+// below the floor, blurred) — dark where the tyres meet the ground, fading
+// up the sills. Baked once per car load; nothing it depends on moves.
+const CS = { size: 7.6, res: 512, height: 1.15, darkness: 1.5, opacity: 0.94 };
+const BLUR_VS = "varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}";
+const BLUR_FS = "uniform sampler2D tDiffuse;uniform vec2 dir;varying vec2 vUv;void main(){vec4 s=vec4(0.);" +
+  "s+=texture2D(tDiffuse,vUv-4.*dir)*.0162;s+=texture2D(tDiffuse,vUv-3.*dir)*.0540;s+=texture2D(tDiffuse,vUv-2.*dir)*.1216;" +
+  "s+=texture2D(tDiffuse,vUv-dir)*.1945;s+=texture2D(tDiffuse,vUv)*.2270;s+=texture2D(tDiffuse,vUv+dir)*.1945;" +
+  "s+=texture2D(tDiffuse,vUv+2.*dir)*.1216;s+=texture2D(tDiffuse,vUv+3.*dir)*.0540;s+=texture2D(tDiffuse,vUv+4.*dir)*.0162;gl_FragColor=s;}";
+function bakeContactShadow(root) {
+  const r = state.renderer;
+  if (!r) return;
+  if (!state.cs) {
+    const mk = () => { const t = new THREE.WebGLRenderTarget(CS.res, CS.res); t.texture.generateMipmaps = false; return t; };
+    const rt = mk(), rtB = mk();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(CS.size, CS.size).rotateX(Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: rt.texture, transparent: true, depthWrite: false, opacity: CS.opacity }));
+    plane.scale.y = -1;
+    plane.position.y = 0.012;
+    plane.renderOrder = 2;
+    plane.name = "ContactShadow";
+    const cam = new THREE.OrthographicCamera(-CS.size / 2, CS.size / 2, CS.size / 2, -CS.size / 2, 0, CS.height);
+    cam.rotation.x = Math.PI / 2; // from the floor, looking up at the underside
+    const depthMat = new THREE.MeshDepthMaterial();
+    depthMat.onBeforeCompile = (sh) => {
+      sh.uniforms.darkness = { value: CS.darkness };
+      sh.fragmentShader = "uniform float darkness;\n" + sh.fragmentShader.replace(
+        "gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );",
+        "gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * darkness );");
+    };
+    depthMat.depthTest = false;
+    depthMat.depthWrite = false;
+    const blurMat = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } },
+      vertexShader: BLUR_VS, fragmentShader: BLUR_FS, depthTest: false, depthWrite: false,
+    });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurMat);
+    quad.frustumCulled = false;
+    const quadScene = new THREE.Scene();
+    quadScene.add(quad);
+    state.cs = { rt, rtB, plane, cam, depthMat, blurMat, quadScene, quadCam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
+    state.scene.add(plane);
+  }
+  const cs = state.cs;
+  const tmp = new THREE.Scene();
+  tmp.overrideMaterial = cs.depthMat;
+  const parent = root.parent;
+  tmp.add(root);
+  // glass doesn't occlude light the way bodywork does
+  const hidden = [];
+  root.traverse((o) => { if (o.isMesh && o.visible && o.material && o.material.transmission > 0) { hidden.push(o); o.visible = false; } });
+  const prevRT = r.getRenderTarget(), prevClear = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
+  r.setRenderTarget(cs.rt);
+  r.setClearColor(0x000000, 0);
+  r.clear();
+  r.render(tmp, cs.cam);
+  const blur = (px) => {
+    cs.blurMat.uniforms.tDiffuse.value = cs.rt.texture;
+    cs.blurMat.uniforms.dir.value.set(px / CS.res, 0);
+    r.setRenderTarget(cs.rtB); r.render(cs.quadScene, cs.quadCam);
+    cs.blurMat.uniforms.tDiffuse.value = cs.rtB.texture;
+    cs.blurMat.uniforms.dir.value.set(0, px / CS.res);
+    r.setRenderTarget(cs.rt); r.render(cs.quadScene, cs.quadCam);
+  };
+  blur(2.2); blur(0.9);
+  r.setRenderTarget(prevRT);
+  r.setClearColor(prevClear, prevAlpha);
+  hidden.forEach((o) => { o.visible = true; });
+  tmp.remove(root);
+  if (parent) parent.add(root);
+  cs.plane.visible = true;
+}
+
+// Seamless studio sweep: the floor curves up into the walls like a photo
+// cyclorama, so there's no horizon line where floor met backdrop. One
+// continuous surface in the floor's own material (a separate wall finish
+// always shows a seam). Car mode only — the architectural diorama keeps the
+// big flat floor and its far ortho camera.
+function makeCyc(mat) {
+  // gentle cove (radius 8): the eye can't find where floor becomes wall
+  const pts = [new THREE.Vector2(0, 0), new THREE.Vector2(6, 0)];
+  for (let i = 1; i <= 24; i++) {
+    const a = (i / 24) * Math.PI / 2;
+    pts.push(new THREE.Vector2(6 + 8 * Math.sin(a), 8 - 8 * Math.cos(a)));
+  }
+  pts.push(new THREE.Vector2(14, 18));
+  const cyc = new THREE.Mesh(new THREE.LatheGeometry(pts, 96), mat);
+  cyc.name = "StudioCyc";
+  return cyc;
+}
+
+// Studio reflections: car photography lives on long softbox / strip-light
+// highlights running down the body. The studio HDRIs alone barely show any,
+// so each set's reflection map = its HDRI (dimmed) + real light panels — a big
+// overhead softbox, side strips, a rear rim — prefiltered once and cached.
+const _studioEnv = {};
+function studioEnvMap(e, equirect) {
+  if (_studioEnv[e.id]) return _studioEnv[e.id];
+  const st = e.studio;
+  const sc = new THREE.Scene();
+  const tex = equirect.clone();
+  tex.mapping = THREE.UVMapping;
+  tex.needsUpdate = true;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 32),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide }));
+  dome.material.color.setScalar(st.hdri);
+  sc.add(dome);
+  const panel = (w, h, pos, k) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k * 0.99, k * 0.97), side: THREE.DoubleSide }));
+    m.position.set(pos[0], pos[1], pos[2]);
+    m.lookAt(0, 0.6, 0);
+    sc.add(m);
+  };
+  panel(10, 4, [0, 9, 0], st.top);               // overhead softbox
+  panel(1.1, 6.5, [-9, 3.2, 1.5], st.side);      // left strip
+  panel(1.1, 6.5, [9, 3.2, -1.5], st.side);      // right strip
+  panel(8, 1.1, [0, 3.0, -10], st.rim);          // rear rim strip
+  panel(7, 1.0, [1.5, 3.4, 10], st.rim * 0.7);   // front kicker
+  const rt = state.pmrem.fromScene(sc, 0.02);
+  tex.dispose();
+  _studioEnv[e.id] = rt.texture;
+  return rt.texture;
+}
+
 function contactShadow() {
   const c = document.createElement("canvas");
   c.width = c.height = 256;
@@ -969,7 +1112,11 @@ function loadCar(cfg) {
     if (isStale()) { disposeRoot(root); return; }
     disposeCar(); // swap: remove the outgoing car only now
     const fb = state.scene.getObjectByName("FallbackShadow");
-    if (fb) fb.visible = !prep.hasBakedShadow;
+    if (fb) fb.visible = false;
+    if (state.cyc) state.cyc.visible = !prep.building;
+    if (state.floor) state.floor.visible = !!prep.building;
+    if (!prep.building) bakeContactShadow(root);
+    else if (state.cs) state.cs.plane.visible = false;
     state.scene.add(root);
     state.renderer.shadowMap.needsUpdate = true; // new shadow caster in the scene
     Object.assign(state, {
@@ -1080,7 +1227,9 @@ function mount(container) {
   // (baked shadows, on-demand renders) so the extra pixels are affordable.
   renderer.setPixelRatio(Math.min(2, Math.max(window.devicePixelRatio || 1, 1.8)));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // Khronos PBR Neutral: built for product renders — paint swatches, calipers
+  // and tint shades come out true instead of ACES's hue shifts/desaturation
+  renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.VSMShadowMap; // soft, blurry studio shadow
@@ -1112,12 +1261,17 @@ function mount(container) {
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
   state.floorMat = floor.material;
+  state.floor = floor;
+  floor.material.side = THREE.DoubleSide;
+  state.cyc = makeCyc(floor.material);
+  scene.add(state.cyc);
+  floor.visible = false; // the sweep is the floor in car mode
 
   // Studio rig: the env map alone lit everything flat and shadowless. A warm
   // key (with a real soft shadow), a cool fill, and a rear rim give the paint
   // highlight gradients and ground the car.
   const key = new THREE.DirectionalLight(0xfff4e8, 1.35);
-  key.position.set(4.5, 6.5, 3.5);
+  key.position.set(KEY_POS[0], KEY_POS[1], KEY_POS[2]);
   state.keyLight = key;
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -1142,7 +1296,7 @@ function mount(container) {
   // shadow catcher: keeps the studio color while receiving the key's shadow
   const catcher = new THREE.Mesh(
     new THREE.CircleGeometry(10, 48),
-    new THREE.ShadowMaterial({ opacity: 0.26 })
+    new THREE.ShadowMaterial({ opacity: 0.17 })
   );
   catcher.rotation.x = -Math.PI / 2;
   catcher.position.y = 0.005;
@@ -1503,6 +1657,7 @@ function applyEnvironment(id) {
     state.floorMat.metalness = e.floor.metalness;
     state.floorMat.envMapIntensity = e.floor.env;
     state.floorMat.needsUpdate = true;
+
   }
   // light rig
   const setL = (l, cfg) => { if (l) { l.color.set(cfg[0]); l.intensity = cfg[1]; } };
@@ -1512,7 +1667,7 @@ function applyEnvironment(id) {
   // HDRI env map (async) — reflections + image-based light; sky bg if asked
   loadHDRI(e.hdri, (env) => {
     if (state.envId !== e.id) return; // switched again mid-load
-    sc.environment = env.pmrem;
+    sc.environment = e.studio ? studioEnvMap(e, env.equirect) : env.pmrem;
     if (e.bg.hdri) sc.background = env.equirect;
     state.envBackground = sc.background;
     if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
