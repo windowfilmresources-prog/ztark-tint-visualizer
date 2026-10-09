@@ -5,9 +5,10 @@
 // is revealed crisp behind it; the exit pulls the pane away to hand off to
 // the app. Each brand plays the same stroke in its own language:
 //   down    (Hüper)    heat shimmer + warm glare, film pulled down the pane
-//   forward (Autobahn) a night-highway rush (WebGL): light streaks tear out of
-//                      the vanishing point, the official lockup rushes in under
-//                      zoom blur and lands hard; exits on the diagonal line.
+//   forward (Autobahn) speed in the brand's own colours (WebGL): red-red-gold
+//                      light ribbons tear past, then the wordmark and the three
+//                      stripes arrive at speed (motion blur) and brake hard into
+//                      the official lockup; exits on the diagonal line.
 //                      No WebGL: a hot diagonal line reveals the lockup instead
 //   cut     (Edge)     cold glare; the navy strike-line is the blade — it cuts
 //                      across, the mark opens out of it, and it contracts into
@@ -81,21 +82,20 @@
   }
 
   // ---------------------------------------------------------------- speed
-  // Autobahn: no limits. Black, then the night highway tears past — road and
-  // street lights stretch into streaks rushing out of the vanishing point,
-  // longer and faster as we accelerate (white, with red taillights and amber
-  // sodium), the edges close in like tunnel vision, the frame shivers. The
-  // mark rushes at us out of the vanishing point under heavy zoom blur and a
-  // touch of colour split, then lands hard with a little overshoot as we
-  // brake; the streaks die, a soft flash marks the arrival. WebGL: the
-  // streak field is procedural (angular bins, perspective-accelerated heads);
-  // the mark renders to a target and is zoom-blurred in the composite. The
-  // settled frame is the DOM lockup pixel-for-pixel, so the canvas hands off
-  // invisibly and releases its GPU context before the 3D viewer boots.
+  // Autobahn: no limits — told only in the brand's own language. On black,
+  // light ribbons in the logo's exact colours tear across the frame, mostly in
+  // red-red-gold sets like the mark's three stripes, on the stripes' rising
+  // slant. Then the wordmark and, one by one, the three stripes arrive from
+  // off-screen at speed — real motion blur, each one's blur reading as its own
+  // light trail — and brake hard into the official lockup. WebGL: ribbons are
+  // quads with a head-bright tail; the mark is motion-blurred by drawing each
+  // layer at many sub-frame times (temporal supersampling) into an accumulation
+  // target. The settled frame is the DOM lockup pixel-for-pixel, so the canvas
+  // hands off invisibly and releases its GPU context before the 3D viewer boots.
   var S_T = {
-    accel: [0.1, 0.86], brake: [0.86, 1.2],
-    zoom: 0.76, zoomDur: 0.44, flash: 1.0,
-    handoff: 1.42,
+    ribbons: [0.04, 0.56], ribbonsOut: [0.78, 1.05],
+    word: 0.42, stripes: [0.5, 0.57, 0.64], arrive: 0.52,
+    handoff: 1.3,
   };
   function bezier(x1, y1, x2, y2) {
     // cubic-bezier(x1,y1,x2,y2) as CSS evaluates it: solve x(t)=p, return y(t)
@@ -109,20 +109,6 @@
     };
   }
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
-  // speed 0..1 over time: creep, floor it, brake hard on arrival
-  function velocity(t) {
-    if (t < S_T.accel[0]) return 0.06;
-    if (t < S_T.accel[1]) { var p = (t - S_T.accel[0]) / (S_T.accel[1] - S_T.accel[0]); return 0.06 + 0.94 * p * p; }
-    if (t < S_T.brake[1]) { var q = (t - S_T.brake[0]) / (S_T.brake[1] - S_T.brake[0]); return (1 - q) * (1 - q) * (1 - q); }
-    return 0;
-  }
-  // distance travelled (integral of velocity), tabulated once
-  var TRAVEL = (function () {
-    var out = [0], d = 0;
-    for (var i = 1; i <= 2000; i++) { d += velocity(i / 1000) / 1000; out.push(d); }
-    return out;
-  })();
-  function travel(t) { var i = Math.max(0, Math.min(2000, Math.round(t * 1000))); return TRAVEL[i]; }
 
   function makeSpeed(cv, bgHex) {
     var gl = null;
@@ -132,39 +118,23 @@
     } catch (e) {}
     if (!gl) return null;
 
+    var SLANT = 3 * Math.PI / 180; // the stripes' rise, same family as the exit line
     var VS_FULL = "attribute vec2 p;varying vec2 uv;void main(){uv=p*.5+.5;gl_Position=vec4(p,0.,1.);}";
     var VS_QUAD = "attribute vec2 q;uniform vec4 uRect;uniform vec2 uRes;varying vec2 vuv;" +
       "void main(){vec2 px=uRect.xy+q*uRect.zw;vuv=q;vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
     var FS_QUAD = "precision highp float;uniform sampler2D uTex;uniform float uA;varying vec2 vuv;" +
       "void main(){gl_FragColor=texture2D(uTex,vuv)*uA;}";
-    var FS_COMP = "precision highp float;varying vec2 uv;uniform sampler2D uA;" +
-      "uniform vec2 uRes;uniform vec2 uVP;uniform float uD;uniform float uV;uniform float uK;" +
-      "uniform float uBlur;uniform float uCA;uniform float uFlash;uniform float uVig;" +
-      "float h(float n){return fract(sin(n*12.9898)*43758.5453);}" +
-      // the highway: light streaks in angular bins, heads accelerating outward
-      "vec3 streaks(vec2 px){vec2 d=px-uVP;float r=length(d);float a=atan(d.y,d.x);float R=length(uRes)*.5;vec3 col=vec3(0.);" +
-      "for(int L=0;L<3;L++){float fl=float(L);float N=fl<.5?84.:fl<1.5?150.:240.;" +
-      "float fa=(a/6.28318+.5)*N+fl*.37;float bi=floor(fa);float fw=fract(fa)-.5;" +
-      "float s1=h(bi+fl*101.),s2=h(bi*1.7+3.1+fl*57.),s3=h(bi*2.3+9.7+fl*13.),s4=h(bi*3.1+1.3+fl*7.);" +
-      "float ac=((bi+.5)/N-.5)*6.28318;if(s4>mix(.3,.95,smoothstep(-.7,.35,sin(ac))))continue;" +   // fewer up into the sky
-      "float head=fract(s1+uD*(.55+.9*s2)*(1.+fl*.3));float hr=pow(head,2.3)*R*1.3;" +
-      "float len=hr*(.05+.7*uV)+2.;float t=(hr-r)/len;" +
-      "float along=step(0.,t)*(1.-smoothstep(0.,1.,t))*smoothstep(.02,.18,head);" +
-      "float wpx=(.45+1.2*s3)*(.35+hr/R*1.6);float across=1.-smoothstep(0.,wpx,abs(fw)*6.28318/N*r);" +
-      "vec3 c=s2<.68?vec3(.86,.9,1.):s2<.87?vec3(1.,.14,.08):vec3(1.,.6,.2);" +
-      "col+=c*along*across*(.35+.75*s3);}" +
-      "return col*uK;}" +
-      "void main(){vec2 px=vec2(uv.x,1.-uv.y)*uRes;vec2 vp=vec2(uVP.x,uRes.y-uVP.y)/uRes;vec3 c;" +
-      // the mark, zoom-blurred toward the vanishing point with a hint of colour split
-      "if(uBlur>.002){vec3 acc=vec3(0.);for(int i=0;i<18;i++){float k=float(i)/17.;float s=1.-uBlur*k;" +
-      "acc.r+=texture2D(uA,vp+(uv-vp)*s*(1.+uCA)).r;acc.g+=texture2D(uA,vp+(uv-vp)*s).g;" +
-      "acc.b+=texture2D(uA,vp+(uv-vp)*s*(1.-uCA)).b;}c=acc/18.;}else c=texture2D(uA,uv).rgb;" +
-      "vec3 bgc=texture2D(uA,vec2(.002,.002)).rgb;float cover=clamp(length(c-bgc)*2.5,0.,1.);" +   // the lights pass BEHIND the mark
-      "c+=streaks(px)*(1.-cover*.9);" +
-      "float rr=length((px-uVP)/length(uRes));" +
-      "c+=vec3(1.,.9,.86)*uFlash*exp(-rr*rr*9.);" +
-      "c*=1.-uVig*smoothstep(.18,.62,rr);" +
-      "gl_FragColor=vec4(c,1.);}";
+    // ribbons: r0 = start time, y at the left edge, speed px/s, length px; r1 = thickness, rgb
+    var VS_RIB = "attribute vec2 corner;attribute vec4 r0;attribute vec4 r1;" +
+      "uniform float uT;uniform vec2 uRes;uniform vec2 uDir;varying vec2 vq;varying vec3 vc;" +
+      "void main(){float age=uT-r0.x;float head=-r0.w*.2+age*r0.z;float along=head-r0.w*(1.-(corner.x*.5+.5));" +
+      "vec2 pp=vec2(-uDir.y,uDir.x);vec2 px=vec2(0.,r0.y)+uDir*along+pp*corner.y*r1.x*3.;" +
+      "if(age<0.)px=vec2(-1e4);vq=corner;vc=r1.yzw;vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
+    var FS_RIB = "precision highp float;varying vec2 vq;varying vec3 vc;uniform float uK;" +
+      "void main(){float u=vq.x*.5+.5;float a=pow(u,2.4)*smoothstep(1.,.97,u);float y=abs(vq.y)*3.;" +
+      "float k=a*((1.-smoothstep(.45,1.,y))+.32*exp(-y*y*.55))*uK;gl_FragColor=vec4(vc*k,min(k,1.));}";
+    var FS_COMP = "precision highp float;varying vec2 uv;uniform sampler2D uA;uniform vec3 uBg;" +
+      "void main(){vec4 a=texture2D(uA,uv);gl_FragColor=vec4(a.rgb+uBg*(1.-clamp(a.a,0.,1.)),1.);}";
 
     function sh(type, src) {
       var s = gl.createShader(type);
@@ -185,7 +155,7 @@
     }
     var P;
     try {
-      P = { quad: prog(VS_QUAD, FS_QUAD, ["q"]), comp: prog(VS_FULL, FS_COMP, ["p"]) };
+      P = { quad: prog(VS_QUAD, FS_QUAD, ["q"]), rib: prog(VS_RIB, FS_RIB, ["corner", "r0", "r1"]), comp: prog(VS_FULL, FS_COMP, ["p"]) };
     } catch (e) {
       if (window.console) console.warn("intro: speed fx off, falling back —", e && e.message);
       return null;
@@ -197,6 +167,8 @@
     var unit = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, unit);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+    var ribBuf = gl.createBuffer(), ribN = 0;
+    var CORNERS = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1];
 
     function tex(w, h, src) {
       var t = gl.createTexture();
@@ -219,12 +191,36 @@
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
       return { t: t, f: f, w: w, h: h };
     }
+    function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+    // pass-bys in the mark's own colours: mostly red-red-gold sets, a few white
+    function genRibbons(Wc, Hc, cy, mh) {
+      var r = rng(5), out = [];
+      var SET = [[1, 0.05, 0.03], [1, 0.05, 0.03], [1, 0.8, 0]];
+      var groups = 8, span = S_T.ribbons[1] - S_T.ribbons[0];
+      for (var g = 0; g < groups; g++) {
+        var t0 = S_T.ribbons[0] + span * g / (groups - 1) + r() * 0.03;
+        var y = cy + (r() * 2 - 1) * Math.max(Hc * 0.3, mh * 1.4);
+        var sp = Wc * (2.6 + r() * 1.6), len = Wc * (0.5 + r() * 0.45);
+        var th = Math.max(2, Math.min(Wc, Hc) * (0.007 + r() * 0.006)), gap = th * 2.5;
+        var trio = r() < 0.78, n = trio ? 3 : 1;
+        for (var k = 0; k < n; k++) {
+          var c = trio ? SET[k] : [0.92, 0.94, 1], gain = trio ? 1 : 0.7;
+          for (var j = 0; j < 6; j++) out.push(CORNERS[j * 2], CORNERS[j * 2 + 1],
+            t0 + k * 0.014, y + k * gap, sp, len, th, c[0] * gain, c[1] * gain, c[2] * gain);
+        }
+      }
+      ribN = out.length / 10;
+      gl.bindBuffer(gl.ARRAY_BUFFER, ribBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.STATIC_DRAW);
+    }
 
     var bg = [parseInt(bgHex.slice(1, 3), 16) / 255, parseInt(bgHex.slice(3, 5), 16) / 255, parseInt(bgHex.slice(5, 7), 16) / 255];
-    var zoomEase = bezier(0.16, 1.1, 0.3, 1); // rush in, overshoot a hair, land
+    var brake = bezier(0.08, 0.82, 0.17, 1); // flat out, then hard on the brakes
+    var SUB = 32, SHUTTER = 0.02;             // motion-blur samples per layer, shutter (s)
 
-    var A = null, parts = [], dpr = 1, Wc = 0, Hc = 0, vp = [0, 0];
-    var raf = 0, t0 = 0, lastT = 0, dead = false;
+    var A = null, parts = [], dpr = 1, Wc = 0, Hc = 0;
+    var raf = 0, t0 = 0, lastT = 0, dead = false, PARTS = null;
 
     function layout(set, mw) {
       Wc = set.clientWidth; Hc = set.clientHeight;
@@ -234,7 +230,6 @@
       A = fbo(cv.width, cv.height);
       var lk = mw.offsetParent, mx = lk.offsetLeft + mw.offsetLeft, my = lk.offsetTop + mw.offsetTop;
       var k = mw.offsetWidth / PARTS.w;
-      vp = [mx + mw.offsetWidth / 2, my + mw.offsetHeight / 2];   // the mark's centre is the horizon
       parts.forEach(function (q) { gl.deleteTexture(q.tex); });
       var imgs = mw.querySelectorAll("img");
       // each layer pre-scaled by the browser to its on-screen size (crisp, no NPOT mip issue)
@@ -246,78 +241,90 @@
         x.drawImage(img, 0, 0, c.width, c.height);
         return tex(0, 0, c);
       };
-      var ii = 0;
+      var ii = 0, si = 0;
       parts = PARTS.parts.map(function (q) {
-        if (q.smear) ii++; // markup order per stripe: smear, then sharp — the zoom blur is the motion here
+        if (q.smear) ii++; // markup order per stripe: smear, then sharp — real motion blur here
         var o = { rect: [mx + q.x * k, my + q.y * k, q.w * k, q.h * k] };
         o.tex = raster(imgs[ii++], o.rect[2], o.rect[3]);
+        o.at = q.smear ? S_T.stripes[si++] : S_T.word;
+        o.dist = o.rect[0] + o.rect[2] + Wc * 0.12; // starts fully off-screen left
         return o;
       });
+      genRibbons(Wc, Hc, my + mw.offsetHeight / 2, mw.offsetHeight);
     }
+
+    function offsetAt(o, t) { return -o.dist * (1 - brake(clamp01((t - o.at) / S_T.arrive))); }
 
     function render(t) {
       lastT = t;
-      var v = velocity(t);
-      var zp = clamp01((t - S_T.zoom) / S_T.zoomDur);
-      var sc = 0.1 + 0.9 * zoomEase(zp);
-      var la = clamp01(zp / 0.3);
-      var blur = zp <= 0 ? 0 : 0.5 * Math.pow(1 - clamp01(zp / 0.85), 2);
-      var streakK = clamp01((t - 0.06) / 0.2) * (1 - clamp01((t - S_T.brake[0] - 0.04) / 0.32));
-      var fl = t < S_T.flash ? 0 : 0.2 * Math.exp(-(t - S_T.flash) / 0.12);
-      // a high-speed shiver of the horizon
-      var sh = v * 1.4;
-      var vx = vp[0] + sh * (Math.sin(t * 91) + 0.5 * Math.sin(t * 157)), vy = vp[1] + sh * (Math.sin(t * 113 + 1) + 0.5 * Math.sin(t * 71));
-
-      // 1 the mark (scaled about the vanishing point) into the target
       gl.bindFramebuffer(gl.FRAMEBUFFER, A.f);
       gl.viewport(0, 0, A.w, A.h);
-      gl.clearColor(bg[0], bg[1], bg[2], 1);
+      gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      if (la > 0) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        var Q = P.quad;
-        gl.useProgram(Q.p);
-        gl.bindBuffer(gl.ARRAY_BUFFER, unit);
-        gl.enableVertexAttribArray(0);
-        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-        gl.uniform2f(Q.u("uRes"), Wc, Hc);
-        gl.uniform1f(Q.u("uA"), la);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.uniform1i(Q.u("uTex"), 0);
-        parts.forEach(function (o) {
-          var r = o.rect;
-          gl.uniform4f(Q.u("uRect"), vp[0] + (r[0] - vp[0]) * sc, vp[1] + (r[1] - vp[1]) * sc, r[2] * sc, r[3] * sc);
-          gl.bindTexture(gl.TEXTURE_2D, o.tex);
-          gl.drawArrays(gl.TRIANGLES, 0, 6);
-        });
-        gl.disable(gl.BLEND);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE); // accumulate light + motion-blur samples
+
+      // 1 the pass-bys
+      var rk = 1 - clamp01((t - S_T.ribbonsOut[0]) / (S_T.ribbonsOut[1] - S_T.ribbonsOut[0]));
+      if (rk > 0) {
+        var R = P.rib;
+        gl.useProgram(R.p);
+        gl.bindBuffer(gl.ARRAY_BUFFER, ribBuf);
+        gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1); gl.enableVertexAttribArray(2);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 40, 0);
+        gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 40, 8);
+        gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 40, 24);
+        gl.uniform1f(R.u("uT"), t);
+        gl.uniform2f(R.u("uRes"), Wc, Hc);
+        gl.uniform2f(R.u("uDir"), Math.cos(SLANT), -Math.sin(SLANT));
+        gl.uniform1f(R.u("uK"), rk);
+        gl.drawArrays(gl.TRIANGLES, 0, ribN);
+        gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
       }
 
-      // 2 composite: zoom-blurred mark + the highway + flash + tunnel vision
+      // 2 the mark, each layer motion-blurred over the shutter (trail fades behind)
+      var Q = P.quad;
+      gl.useProgram(Q.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, unit);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(Q.u("uRes"), Wc, Hc);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.uniform1i(Q.u("uTex"), 0);
+      var wsum = 0, wts = [];
+      for (var i = 0; i < SUB; i++) { var w = Math.pow(1 - i / SUB, 1.3); wts.push(w); wsum += w; }
+      parts.forEach(function (o) {
+        if (t < o.at) return;
+        var r = o.rect, x1 = offsetAt(o, t), x0 = offsetAt(o, t - SHUTTER);
+        gl.bindTexture(gl.TEXTURE_2D, o.tex);
+        if (Math.abs(x1 - x0) < 0.25) { // at rest: one sharp draw (== the DOM lockup)
+          gl.uniform1f(Q.u("uA"), 1);
+          gl.uniform4f(Q.u("uRect"), r[0] + x1, r[1], r[2], r[3]);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+          return;
+        }
+        for (var i = 0; i < SUB; i++) {
+          var x = offsetAt(o, t - SHUTTER * i / (SUB - 1));
+          gl.uniform1f(Q.u("uA"), wts[i] / wsum);
+          gl.uniform4f(Q.u("uRect"), r[0] + x, r[1], r[2], r[3]);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+      });
+      gl.disable(gl.BLEND);
+
+      // 3 onto the black
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, cv.width, cv.height);
       var C = P.comp;
       gl.useProgram(C.p);
       gl.bindBuffer(gl.ARRAY_BUFFER, tri);
-      gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-      gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, A.t);
       gl.uniform1i(C.u("uA"), 0);
-      gl.uniform2f(C.u("uRes"), Wc, Hc);
-      gl.uniform2f(C.u("uVP"), vx, vy);
-      gl.uniform1f(C.u("uD"), travel(t) * 2.2);
-      gl.uniform1f(C.u("uV"), v);
-      gl.uniform1f(C.u("uK"), streakK);
-      gl.uniform1f(C.u("uBlur"), blur);
-      gl.uniform1f(C.u("uCA"), blur * 0.03);
-      gl.uniform1f(C.u("uFlash"), fl);
-      gl.uniform1f(C.u("uVig"), 0.55 * v);
+      gl.uniform3f(C.u("uBg"), bg[0], bg[1], bg[2]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    var PARTS = null;
     var api = {
       onDone: null,
       prepare: function (set, mw, parts_) {
@@ -471,7 +478,7 @@
     fxcv.setAttribute("aria-hidden", "true");
     fx = makeSpeed(fxcv, bg);
   }
-  if (fx) T = { pull: S_T.zoom, pullDur: S_T.zoomDur, sub: 1.3, glint: 1.56, rule: 1.3, exit: 2.65, exitDur: 0.55 };
+  if (fx) T = { pull: S_T.word, pullDur: S_T.arrive, sub: 1.2, glint: 1.45, rule: 1.2, exit: 2.6, exitDur: 0.55 };
 
   var el = document.createElement("div");
   el.id = "brandIntro";
@@ -702,7 +709,7 @@
       R.push(
         // the GL drove the stripes; the DOM lockup it hands off to is the parked state
         "#brandIntro .bi-strp .bi-smear{visibility:hidden}",
-        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (S_T.zoom + 0.3) + "s both}",
+        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (S_T.stripes[2] + S_T.arrive - 0.1) + "s both}",
         "@keyframes biBloom{0%{opacity:0}30%{opacity:1}100%{opacity:.35}}"
       );
     } else if (pull === "forward") {
