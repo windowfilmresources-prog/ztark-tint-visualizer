@@ -5,9 +5,10 @@
 // is revealed crisp behind it; the exit pulls the pane away to hand off to
 // the app. Each brand plays the same stroke in its own language:
 //   down    (Hüper)    heat shimmer + warm glare, film pulled down the pane
-//   forward (Autobahn) night + speed streaks; a hot diagonal line sweeps across
-//                      and reveals the official lockup — the stripes drive in
-//                      at speed (motion-smeared) and lock into place
+//   forward (Autobahn) a night-highway rush (WebGL): light streaks tear out of
+//                      the vanishing point, the official lockup rushes in under
+//                      zoom blur and lands hard; exits on the diagonal line.
+//                      No WebGL: a hot diagonal line reveals the lockup instead
 //   cut     (Edge)     cold glare; the navy strike-line is the blade — it cuts
 //                      across, the mark opens out of it, and it contracts into
 //                      the logo's own strike
@@ -79,26 +80,22 @@
     };
   }
 
-  // ---------------------------------------------------------------- water
-  // Autobahn: the installer's first move. Night glass, traffic and city lights
-  // streaming past behind it at three depths; three pumps of slip solution
-  // coat the window — fine mist through to fat drops, irregular, the heavy
-  // ones starting to run and leaving wet trails — then an invisible rag wipes
-  // it down in one fast diagonal stroke: no wiper, only what water does (a
-  // bead of pushed water rides the edge, drops are gathered into it), and the
-  // mark is on the clean glass with its stripes driving in at speed.
-  // Optics as a camera sees rain on glass: focus is ON the glass, so the night
-  // behind is soft bokeh — but every drop is a lens that refocuses it, holding
-  // a tiny, sharp, inverted copy of the lights. So the scene renders twice
-  // (bokeh + focused) and the composite looks through glass at one, through
-  // drops at the other, from a splatted height field (normals → dark rims,
-  // lit lower crescent). The finished frame is the DOM lockup pixel-for-pixel,
-  // so the canvas hands off invisibly and releases its GPU context before the
-  // 3D viewer boots.
-  var W_T = {
-    bursts: [0.05, 0.17, 0.29],
-    wipe: 0.74, wipeDur: 0.52, drive: [0.8, 0.87, 0.94], driveDur: 0.82, word: 0.74, wordDur: 0.9,
-    handoff: 1.8,
+  // ---------------------------------------------------------------- speed
+  // Autobahn: no limits. Black, then the night highway tears past — road and
+  // street lights stretch into streaks rushing out of the vanishing point,
+  // longer and faster as we accelerate (white, with red taillights and amber
+  // sodium), the edges close in like tunnel vision, the frame shivers. The
+  // mark rushes at us out of the vanishing point under heavy zoom blur and a
+  // touch of colour split, then lands hard with a little overshoot as we
+  // brake; the streaks die, a soft flash marks the arrival. WebGL: the
+  // streak field is procedural (angular bins, perspective-accelerated heads);
+  // the mark renders to a target and is zoom-blurred in the composite. The
+  // settled frame is the DOM lockup pixel-for-pixel, so the canvas hands off
+  // invisibly and releases its GPU context before the 3D viewer boots.
+  var S_T = {
+    accel: [0.1, 0.86], brake: [0.86, 1.2],
+    zoom: 0.76, zoomDur: 0.44, flash: 1.0,
+    handoff: 1.42,
   };
   function bezier(x1, y1, x2, y2) {
     // cubic-bezier(x1,y1,x2,y2) as CSS evaluates it: solve x(t)=p, return y(t)
@@ -111,17 +108,23 @@
       return c(y1, y2, t);
     };
   }
-  function keys(p, k) { // piecewise-linear [[at,val],...]
-    if (p <= k[0][0]) return k[0][1];
-    for (var i = 1; i < k.length; i++) if (p <= k[i][0]) {
-      var a = k[i - 1], b = k[i];
-      return a[1] + (b[1] - a[1]) * (p - a[0]) / (b[0] - a[0]);
-    }
-    return k[k.length - 1][1];
-  }
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+  // speed 0..1 over time: creep, floor it, brake hard on arrival
+  function velocity(t) {
+    if (t < S_T.accel[0]) return 0.06;
+    if (t < S_T.accel[1]) { var p = (t - S_T.accel[0]) / (S_T.accel[1] - S_T.accel[0]); return 0.06 + 0.94 * p * p; }
+    if (t < S_T.brake[1]) { var q = (t - S_T.brake[0]) / (S_T.brake[1] - S_T.brake[0]); return (1 - q) * (1 - q) * (1 - q); }
+    return 0;
+  }
+  // distance travelled (integral of velocity), tabulated once
+  var TRAVEL = (function () {
+    var out = [0], d = 0;
+    for (var i = 1; i <= 2000; i++) { d += velocity(i / 1000) / 1000; out.push(d); }
+    return out;
+  })();
+  function travel(t) { var i = Math.max(0, Math.min(2000, Math.round(t * 1000))); return TRAVEL[i]; }
 
-  function makeWater(cv, bgHex) {
+  function makeSpeed(cv, bgHex) {
     var gl = null;
     try {
       gl = cv.getContext("webgl", { alpha: false, antialias: false, depth: false, stencil: false,
@@ -130,68 +133,37 @@
     if (!gl) return null;
 
     var VS_FULL = "attribute vec2 p;varying vec2 uv;void main(){uv=p*.5+.5;gl_Position=vec4(p,0.,1.);}";
-    // night lights: one quad each; bokeh disc (glass view) or focused point (drop view)
-    var VS_LIGHT = "attribute vec2 corner;attribute vec4 l0;attribute vec4 l1;" +
-      "uniform vec2 uRes;uniform float uT;uniform float uSharp;varying vec2 vq;varying vec3 vc;" +
-      "void main(){float m=min(uRes.x,uRes.y);float span=uRes.x*1.7;" +
-      "float x=mod(l0.x*uRes.x-uT*l0.w*uRes.x,span)-uRes.x*.35;" +
-      "float r=l0.z*m*(uSharp>.5?.32:1.);float st=uSharp>.5?1.+(l1.w-1.)*.4:l1.w;" +
-      "vec2 px=vec2(x,l0.y*uRes.y)+corner*vec2(r*st,r);vq=corner;vc=l1.rgb;" +
-      "vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
-    var FS_LIGHT = "precision highp float;varying vec2 vq;varying vec3 vc;uniform float uK;uniform float uSharp;" +
-      "void main(){float d=length(vq);float f=uSharp>.5?smoothstep(1.,.45,d)*2.4:" +
-      "smoothstep(1.,.62,d)*(.85+.2*smoothstep(.45,.9,d));gl_FragColor=vec4(vc*f*uK,0.);}";
-    var VS_QUAD = "attribute vec2 q;uniform vec4 uRect;uniform vec2 uRes;varying vec2 vuv;varying vec2 vpx;" +
-      "void main(){vpx=uRect.xy+q*uRect.zw;vuv=q;vec2 n=vpx/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
-    var FS_QUAD = "precision highp float;uniform sampler2D uTex;uniform float uA;uniform float uGhost;uniform vec3 uW;" +
-      "varying vec2 vuv;varying vec2 vpx;" +
-      "void main(){vec4 t=texture2D(uTex,vuv);float s=dot(uW.xy,vpx)-uW.z;float wiped=1.-smoothstep(-4.,3.,s);" +
-      "gl_FragColor=t*(uA*mix(uGhost,1.,wiped));}";
-    // drops: d0 = x, y, r, landing time; d1 = shape seed, kind (0 drop, 1 runner, 2 trail), run start, run accel
-    var VS_DROP = "attribute vec2 corner;attribute vec4 d0;attribute vec4 d1;" +
-      "uniform float uT;uniform vec2 uRes;uniform vec3 uW;varying vec2 vq;varying float vk;varying float vs;varying float vkind;" +
-      "const vec2 RUN=vec2(-.2,.98);" +
-      "void main(){float age=uT-d0.w;float on=age<0.?0.:1.;" +
-      "float run=d1.y>.5?d1.w*pow(max(0.,uT-d1.z),2.):0.;vec2 pos=d0.xy;vec2 px;vs=d1.x;" +
-      "if(d1.y>1.5){vec2 pp=vec2(RUN.y,-RUN.x);float on2=on*step(1.5,run);" +
-      "px=pos+RUN*(run*(corner.y*.5+.5))*on2+pp*corner.x*d0.z*.34*on2;" +
-      "vq=corner;vk=.24*min(1.,d0.z/11.);vkind=2.;}" +
-      "else{float r=on*d0.z*(.6+.4*clamp(age/.06,0.,1.))*(1.+.1*clamp(age/.5,0.,1.));" +
-      "pos+=RUN*run;float s=dot(uW.xy,pos)-uW.z;float c=max(0.,-s);pos+=uW.xy*c;r*=exp(-c/60.);" +
-      "px=pos+corner*r*1.16;vq=corner*1.16;vk=min(1.,d0.z/11.);vkind=0.;}" +
-      "vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
-    var FS_DROP = "precision mediump float;varying vec2 vq;varying float vk;varying float vs;varying float vkind;" +
-      "void main(){if(vkind>1.5){float x=abs(vq.x);if(x>1.)discard;" +
-      "gl_FragColor=vec4(sqrt(1.-x*x)*vk*(.35+.65*(vq.y*.5+.5)),0.,0.,1.);return;}" +
-      "float th=atan(vq.y,vq.x);float rr=1.+.03*sin(3.*th+vs*6.283)+.018*sin(5.*th+vs*17.);" +
-      "vec2 q=vq;q.y*=q.y>0.?.93:1.03;float d=length(q)/rr;if(d>1.)discard;" +
-      "gl_FragColor=vec4(sqrt(1.-d*d)*vk,0.,0.,1.);}";
-    var FS_WIPE = "precision highp float;varying vec2 uv;uniform vec2 uRes;uniform vec3 uW;uniform float uMode;" +
-      "float h1(float n){return fract(sin(n)*43758.5453);}" +
-      "float ns(float x){float i=floor(x),f=fract(x);return mix(h1(i),h1(i+1.),f*f*(3.-2.*f));}" +
-      "void main(){vec2 px=vec2(uv.x,1.-uv.y)*uRes;float s=dot(uW.xy,px)-uW.z;" +
-      "if(uMode<.5){gl_FragColor=vec4(smoothstep(-1.,3.,s));return;}" +
-      "float al=dot(vec2(-uW.y,uW.x),px);float wob=.62+.3*ns(al*.04)+.22*ns(al*.19);" +
-      "float bead=exp(-pow((s-7.)/6.5,2.))*wob;" +
-      "gl_FragColor=vec4(bead,0.,0.,1.);}";
-    var FS_COMP = "precision highp float;varying vec2 uv;uniform sampler2D uA;uniform sampler2D uB;uniform sampler2D uH;" +
-      "uniform vec2 uRes;uniform vec2 uTx;uniform vec3 uW;uniform float uLens;uniform float uSlope;uniform float uWet;" +
-      "float H(vec2 p){return texture2D(uH,p).r;}" +
-      "void main(){float hc=H(uv);" +
-      "vec2 g=vec2(H(uv+vec2(uTx.x,0.))-H(uv-vec2(uTx.x,0.)),H(uv+vec2(0.,uTx.y))-H(uv-vec2(0.,uTx.y)));" +
-      "vec3 n=normalize(vec3(-g*uSlope,1.));float w=smoothstep(.015,.07,hc);" +
-      "vec2 px=vec2(uv.x,1.-uv.y)*uRes;float ws=smoothstep(-2.,8.,dot(uW.xy,px)-uW.z)*uWet;" +
-      // the glass between drops: out-of-focus night, fogged a little by the film
-      "vec2 b=2./uRes;vec2 e=vec2(b.x*1.6,0.);vec2 f=vec2(0.,b.y*1.6);" +
-      "vec3 bl=(texture2D(uA,uv+b).rgb+texture2D(uA,uv-b).rgb+texture2D(uA,uv+vec2(b.x,-b.y)).rgb+texture2D(uA,uv+vec2(-b.x,b.y)).rgb+" +
-      "texture2D(uA,uv+e).rgb+texture2D(uA,uv-e).rgb+texture2D(uA,uv+f).rgb+texture2D(uA,uv-f).rgb)*.125;" +
-      "vec3 glass=mix(texture2D(uA,uv).rgb,bl,ws*.85)+vec3(.007,.0075,.009)*ws;" +
-      // inside a drop: a lens — the night refocused, inverted, shrunk
-      "vec2 lo=-n.xy*uLens/uRes;vec3 drop=texture2D(uA,uv+lo*.45).rgb*.9+texture2D(uB,uv+lo).rgb*.55+vec3(.01,.011,.013);" +
-      "vec3 c=mix(glass,drop,w);float sl=length(n.xy);" +
-      "c*=1.-.48*smoothstep(.68,.98,sl)*w;" +
-      "c+=vec3(.78,.84,.95)*.06*smoothstep(.35,.9,sl)*w*clamp(.3-n.y*1.6,0.,1.);" +
-      "c+=vec3(1.)*pow(max(dot(n,normalize(vec3(-.4,.55,.75))),0.),110.)*.28*w;" +
+    var VS_QUAD = "attribute vec2 q;uniform vec4 uRect;uniform vec2 uRes;varying vec2 vuv;" +
+      "void main(){vec2 px=uRect.xy+q*uRect.zw;vuv=q;vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
+    var FS_QUAD = "precision highp float;uniform sampler2D uTex;uniform float uA;varying vec2 vuv;" +
+      "void main(){gl_FragColor=texture2D(uTex,vuv)*uA;}";
+    var FS_COMP = "precision highp float;varying vec2 uv;uniform sampler2D uA;" +
+      "uniform vec2 uRes;uniform vec2 uVP;uniform float uD;uniform float uV;uniform float uK;" +
+      "uniform float uBlur;uniform float uCA;uniform float uFlash;uniform float uVig;" +
+      "float h(float n){return fract(sin(n*12.9898)*43758.5453);}" +
+      // the highway: light streaks in angular bins, heads accelerating outward
+      "vec3 streaks(vec2 px){vec2 d=px-uVP;float r=length(d);float a=atan(d.y,d.x);float R=length(uRes)*.5;vec3 col=vec3(0.);" +
+      "for(int L=0;L<3;L++){float fl=float(L);float N=fl<.5?84.:fl<1.5?150.:240.;" +
+      "float fa=(a/6.28318+.5)*N+fl*.37;float bi=floor(fa);float fw=fract(fa)-.5;" +
+      "float s1=h(bi+fl*101.),s2=h(bi*1.7+3.1+fl*57.),s3=h(bi*2.3+9.7+fl*13.),s4=h(bi*3.1+1.3+fl*7.);" +
+      "float ac=((bi+.5)/N-.5)*6.28318;if(s4>mix(.3,.95,smoothstep(-.7,.35,sin(ac))))continue;" +   // fewer up into the sky
+      "float head=fract(s1+uD*(.55+.9*s2)*(1.+fl*.3));float hr=pow(head,2.3)*R*1.3;" +
+      "float len=hr*(.05+.7*uV)+2.;float t=(hr-r)/len;" +
+      "float along=step(0.,t)*(1.-smoothstep(0.,1.,t))*smoothstep(.02,.18,head);" +
+      "float wpx=(.45+1.2*s3)*(.35+hr/R*1.6);float across=1.-smoothstep(0.,wpx,abs(fw)*6.28318/N*r);" +
+      "vec3 c=s2<.68?vec3(.86,.9,1.):s2<.87?vec3(1.,.14,.08):vec3(1.,.6,.2);" +
+      "col+=c*along*across*(.35+.75*s3);}" +
+      "return col*uK;}" +
+      "void main(){vec2 px=vec2(uv.x,1.-uv.y)*uRes;vec2 vp=vec2(uVP.x,uRes.y-uVP.y)/uRes;vec3 c;" +
+      // the mark, zoom-blurred toward the vanishing point with a hint of colour split
+      "if(uBlur>.002){vec3 acc=vec3(0.);for(int i=0;i<18;i++){float k=float(i)/17.;float s=1.-uBlur*k;" +
+      "acc.r+=texture2D(uA,vp+(uv-vp)*s*(1.+uCA)).r;acc.g+=texture2D(uA,vp+(uv-vp)*s).g;" +
+      "acc.b+=texture2D(uA,vp+(uv-vp)*s*(1.-uCA)).b;}c=acc/18.;}else c=texture2D(uA,uv).rgb;" +
+      "vec3 bgc=texture2D(uA,vec2(.002,.002)).rgb;float cover=clamp(length(c-bgc)*2.5,0.,1.);" +   // the lights pass BEHIND the mark
+      "c+=streaks(px)*(1.-cover*.9);" +
+      "float rr=length((px-uVP)/length(uRes));" +
+      "c+=vec3(1.,.9,.86)*uFlash*exp(-rr*rr*9.);" +
+      "c*=1.-uVig*smoothstep(.18,.62,rr);" +
       "gl_FragColor=vec4(c,1.);}";
 
     function sh(type, src) {
@@ -213,13 +185,9 @@
     }
     var P;
     try {
-      P = {
-        light: prog(VS_LIGHT, FS_LIGHT, ["corner", "l0", "l1"]), quad: prog(VS_QUAD, FS_QUAD, ["q"]),
-        drop: prog(VS_DROP, FS_DROP, ["corner", "d0", "d1"]), wipe: prog(VS_FULL, FS_WIPE, ["p"]),
-        comp: prog(VS_FULL, FS_COMP, ["p"]),
-      };
+      P = { quad: prog(VS_QUAD, FS_QUAD, ["q"]), comp: prog(VS_FULL, FS_COMP, ["p"]) };
     } catch (e) {
-      if (window.console) console.warn("intro: water off, falling back —", e && e.message);
+      if (window.console) console.warn("intro: speed fx off, falling back —", e && e.message);
       return null;
     }
 
@@ -229,8 +197,6 @@
     var unit = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, unit);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
-    var dropBuf = gl.createBuffer(), dropN = 0, lightBuf = gl.createBuffer(), lightN = 0;
-    var CORNERS = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1];
 
     function tex(w, h, src) {
       var t = gl.createTexture();
@@ -253,89 +219,23 @@
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
       return { t: t, f: f, w: w, h: h };
     }
-    function free(o) { if (o) { gl.deleteTexture(o.t); if (o.f) gl.deleteFramebuffer(o.f); } }
-
-    // seeded so every load sprays the same handsome pattern
-    function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-
-    function genDrops(Wc, Hc) {
-      var r = rng(7), area = Wc * Hc;
-      var gauss = function () { return Math.sqrt(-2 * Math.log(r() || 1e-6)) * Math.cos(6.2832 * r()); };
-      var bursts = [
-        { x: 0.28 * Wc, y: 0.40 * Hc, t: W_T.bursts[0] },
-        { x: 0.68 * Wc, y: 0.36 * Hc, t: W_T.bursts[1] },
-        { x: 0.50 * Wc, y: 0.68 * Hc, t: W_T.bursts[2] },
-      ];
-      // [count, rMin, rMax, runner share]: mist → fat drops; the heavy ones run
-      var groups = [[area / 120, 0.7, 2.2, 0], [area / 900, 2.2, 4.5, 0], [area / 3200, 4.5, 8.5, 0.08], [area / 22000, 8, 12.5, 0.45]];
-      var out = [];
-      var push = function (x, y, rad, t0, seed, kind, runT, acc) {
-        for (var k = 0; k < 6; k++) out.push(CORNERS[k * 2], CORNERS[k * 2 + 1], x, y, rad, t0, seed, kind, runT, acc);
-      };
-      groups.forEach(function (g) {
-        var n = Math.round(g[0]);
-        for (var i = 0; i < n; i++) {
-          var b = bursts[Math.floor(r() * 3)], x, y;
-          if (r() < 0.82) { x = b.x + gauss() * 0.26 * Wc; y = b.y + gauss() * 0.24 * Hc; }
-          else { x = r() * Wc; y = r() * Hc; }
-          x = Math.max(-20, Math.min(Wc + 20, x)); y = Math.max(-20, Math.min(Hc + 20, y));
-          var rad = g[1] + (g[2] - g[1]) * r() * r();
-          var t0 = b.t + Math.hypot(x - b.x, y - b.y) / 3000 + r() * 0.06;
-          var seed = r();
-          if (r() < g[3]) {
-            var runT = t0 + 0.14 + r() * 0.22, acc = 260 + r() * 520;
-            push(x, y, rad, t0, seed, 2, runT, acc);   // its wet trail first, under it
-            push(x, y, rad, t0, seed, 1, runT, acc);
-          } else {
-            push(x, y, rad, t0, seed, 0, 0, 0);
-          }
-        }
-      });
-      dropN = out.length / 10;
-      gl.bindBuffer(gl.ARRAY_BUFFER, dropBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.STATIC_DRAW);
-    }
-
-    // the night at three depths. Focus is on the glass, so every light out
-    // there is near infinity: bokeh discs come out about the same size — depth
-    // reads as brightness and parallax speed (far drift, near traffic flies)
-    function genLights() {
-      var r = rng(11), out = [];
-      var PAL = [[1.0, 0.52, 0.16], [0.86, 0.9, 1.0], [1.0, 0.1, 0.06], [1.0, 0.68, 0.24], [0.32, 0.46, 1.0], [0.25, 0.9, 0.55]];
-      var LAYERS = [ // count, rMin, rMax (frac of min side), speed (W/s), gain, y band
-        [13, 0.026, 0.038, 0.25, 0.26, [0.30, 0.60]],
-        [9, 0.032, 0.048, 0.75, 0.46, [0.22, 0.78]],
-        [4, 0.045, 0.065, 1.6, 0.5, [0.18, 0.86]],
-      ];
-      LAYERS.forEach(function (L) {
-        for (var i = 0; i < L[0]; i++) {
-          var c = PAL[r() < 0.93 ? Math.floor(r() * 5) : 5], k = L[4] * (0.55 + r() * 0.6);
-          var rad = L[1] + (L[2] - L[1]) * r(), sp = L[3] * (0.8 + r() * 0.4);
-          var y = L[5][0] + (L[5][1] - L[5][0]) * r(), st = 1 + sp * 0.35, x0 = r() * 1.7;
-          for (var j = 0; j < 6; j++) out.push(CORNERS[j * 2], CORNERS[j * 2 + 1], x0, y, rad, sp, c[0] * k, c[1] * k, c[2] * k, st);
-        }
-      });
-      lightN = out.length / 10;
-      gl.bindBuffer(gl.ARRAY_BUFFER, lightBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.STATIC_DRAW);
-    }
 
     var bg = [parseInt(bgHex.slice(1, 3), 16) / 255, parseInt(bgHex.slice(3, 5), 16) / 255, parseInt(bgHex.slice(5, 7), 16) / 255];
-    var ease = { wipe: bezier(0.45, 0, 0.2, 1), drive: bezier(0.16, 1, 0.3, 1) };
+    var zoomEase = bezier(0.16, 1.1, 0.3, 1); // rush in, overshoot a hair, land
 
-    var S = null, parts = [], dpr = 1, Wc = 0, Hc = 0, wipeN = [0, 0], cMin = 0, cMax = 0;
+    var A = null, parts = [], dpr = 1, Wc = 0, Hc = 0, vp = [0, 0];
     var raf = 0, t0 = 0, lastT = 0, dead = false;
 
-    function layout(set, mw, PARTS) {
+    function layout(set, mw) {
       Wc = set.clientWidth; Hc = set.clientHeight;
       dpr = Math.min(window.devicePixelRatio || 1, 1.75);
       cv.width = Math.round(Wc * dpr); cv.height = Math.round(Hc * dpr);
-      if (S) { free(S.a); free(S.b); free(S.h); }
-      var hs = Math.min(1, 1.5 / dpr);
-      S = { a: fbo(cv.width, cv.height), b: fbo(cv.width, cv.height), h: fbo(Math.round(cv.width * hs), Math.round(cv.height * hs)) };
+      if (A) { gl.deleteTexture(A.t); gl.deleteFramebuffer(A.f); }
+      A = fbo(cv.width, cv.height);
       var lk = mw.offsetParent, mx = lk.offsetLeft + mw.offsetLeft, my = lk.offsetTop + mw.offsetTop;
       var k = mw.offsetWidth / PARTS.w;
-      parts.forEach(function (q) { gl.deleteTexture(q.tex); if (q.stex) gl.deleteTexture(q.stex); });
+      vp = [mx + mw.offsetWidth / 2, my + mw.offsetHeight / 2];   // the mark's centre is the horizon
+      parts.forEach(function (q) { gl.deleteTexture(q.tex); });
       var imgs = mw.querySelectorAll("img");
       // each layer pre-scaled by the browser to its on-screen size (crisp, no NPOT mip issue)
       var raster = function (img, w, h) {
@@ -348,166 +248,90 @@
       };
       var ii = 0;
       parts = PARTS.parts.map(function (q) {
-        var o = { rect: [mx + q.x * k, my + q.y * k, q.w * k, q.h * k], stripe: !!q.smear };
-        if (q.smear) { // markup order per stripe: smear, then sharp
-          o.srect = [o.rect[0] - q.padL * k, o.rect[1], (q.w + q.padL + q.padR) * k, o.rect[3]];
-          o.stex = raster(imgs[ii++], o.srect[2], o.srect[3]);
-        }
+        if (q.smear) ii++; // markup order per stripe: smear, then sharp — the zoom blur is the motion here
+        var o = { rect: [mx + q.x * k, my + q.y * k, q.w * k, q.h * k] };
         o.tex = raster(imgs[ii++], o.rect[2], o.rect[3]);
         return o;
       });
-      // the wipe: a front leaning like the exit line, travelling right
-      var a = 12 * Math.PI / 180;
-      wipeN = [Math.cos(a), Math.sin(a)];
-      var ds = [0, wipeN[0] * Wc, wipeN[1] * Hc, wipeN[0] * Wc + wipeN[1] * Hc];
-      cMin = Math.min.apply(null, ds) - 40; cMax = Math.max.apply(null, ds) + 140;
-      genDrops(Wc, Hc);
-      genLights();
-    }
-
-    function attrib10(buf) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1); gl.enableVertexAttribArray(2);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 40, 0);
-      gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 40, 8);
-      gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 40, 24);
-    }
-    function attribFull(prg) {
-      gl.useProgram(prg.p);
-      gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
-      gl.bindBuffer(gl.ARRAY_BUFFER, tri);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    }
-    function quad(texId, rect, a, ghost, W) {
-      var q = P.quad;
-      gl.uniform4f(q.u("uRect"), rect[0], rect[1], rect[2], rect[3]);
-      gl.uniform1f(q.u("uA"), a);
-      gl.uniform1f(q.u("uGhost"), ghost);
-      gl.uniform3f(q.u("uW"), W[0], W[1], W[2]);
-      gl.bindTexture(gl.TEXTURE_2D, texId);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-
-    // the scene behind/on the glass: night lights (bokeh or focused) + the mark
-    function scene(target, sharp, t, W, lightsK, spray) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, target.f);
-      gl.viewport(0, 0, target.w, target.h);
-      gl.clearColor(bg[0], bg[1], bg[2], 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      if (lightsK > 0) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.ONE, gl.ONE);
-        var Lp = P.light;
-        gl.useProgram(Lp.p);
-        attrib10(lightBuf);
-        gl.uniform2f(Lp.u("uRes"), Wc, Hc);
-        gl.uniform1f(Lp.u("uT"), t);
-        gl.uniform1f(Lp.u("uSharp"), sharp ? 1 : 0);
-        gl.uniform1f(Lp.u("uK"), lightsK);
-        gl.drawArrays(gl.TRIANGLES, 0, lightN);
-        gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
-      }
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.useProgram(P.quad.p);
-      gl.bindBuffer(gl.ARRAY_BUFFER, unit);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-      gl.uniform2f(P.quad.u("uRes"), Wc, Hc);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.uniform1i(P.quad.u("uTex"), 0);
-      var si = 0;
-      parts.forEach(function (o) {
-        if (!o.stripe) {
-          var wpp = ease.drive(clamp01((t - W_T.word) / W_T.wordDur));
-          var dx = -0.04 * o.rect[2] * (1 - wpp);
-          quad(o.tex, [o.rect[0] + dx, o.rect[1], o.rect[2], o.rect[3]], 1, 0.09 * spray, W);
-          return;
-        }
-        var p = clamp01((t - W_T.drive[si++]) / W_T.driveDur);
-        var off = -0.95 * o.rect[2] * (1 - ease.drive(p));
-        var sa = keys(p, [[0, 1], [0.3, 0.9], [0.62, 0], [1, 0]]);
-        var ha = keys(p, [[0, 0], [0.26, 0], [0.58, 1], [1, 1]]);
-        if (sa > 0) quad(o.stex, [o.srect[0] + off, o.srect[1], o.srect[2], o.srect[3]], sa, 0, W);
-        if (ha > 0) quad(o.tex, [o.rect[0] + off, o.rect[1], o.rect[2], o.rect[3]], ha, 0, W);
-      });
-      gl.disable(gl.BLEND);
     }
 
     function render(t) {
       lastT = t;
-      var wp = ease.wipe(clamp01((t - W_T.wipe) / W_T.wipeDur));
-      var W = [wipeN[0], wipeN[1], cMin + (cMax - cMin) * wp];
-      var spray = clamp01((t - W_T.bursts[0]) / 0.45);
-      var lightsK = 1 - clamp01((t - W_T.wipe) / 0.7);
+      var v = velocity(t);
+      var zp = clamp01((t - S_T.zoom) / S_T.zoomDur);
+      var sc = 0.1 + 0.9 * zoomEase(zp);
+      var la = clamp01(zp / 0.3);
+      var blur = zp <= 0 ? 0 : 0.5 * Math.pow(1 - clamp01(zp / 0.85), 2);
+      var streakK = clamp01((t - 0.06) / 0.2) * (1 - clamp01((t - S_T.brake[0] - 0.04) / 0.32));
+      var fl = t < S_T.flash ? 0 : 0.2 * Math.exp(-(t - S_T.flash) / 0.12);
+      // a high-speed shiver of the horizon
+      var sh = v * 1.4;
+      var vx = vp[0] + sh * (Math.sin(t * 91) + 0.5 * Math.sin(t * 157)), vy = vp[1] + sh * (Math.sin(t * 113 + 1) + 0.5 * Math.sin(t * 71));
 
-      // 1 the night twice: as the camera sees it (bokeh) and as a drop refocuses it
-      scene(S.a, false, t, W, lightsK, spray);
-      scene(S.b, true, t, W, lightsK, spray);
-
-      // 2 water height field: drops + trails (additive) → wiped side erased → bead
-      gl.bindFramebuffer(gl.FRAMEBUFFER, S.h.f);
-      gl.viewport(0, 0, S.h.w, S.h.h);
-      gl.clearColor(0, 0, 0, 1);
+      // 1 the mark (scaled about the vanishing point) into the target
+      gl.bindFramebuffer(gl.FRAMEBUFFER, A.f);
+      gl.viewport(0, 0, A.w, A.h);
+      gl.clearColor(bg[0], bg[1], bg[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE);
-      var D = P.drop;
-      gl.useProgram(D.p);
-      attrib10(dropBuf);
-      gl.uniform1f(D.u("uT"), t);
-      gl.uniform2f(D.u("uRes"), Wc, Hc);
-      gl.uniform3f(D.u("uW"), W[0], W[1], W[2]);
-      gl.drawArrays(gl.TRIANGLES, 0, dropN);
-
-      attribFull(P.wipe);
-      gl.uniform2f(P.wipe.u("uRes"), Wc, Hc);
-      gl.uniform3f(P.wipe.u("uW"), W[0], W[1], W[2]);
-      gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
-      gl.uniform1f(P.wipe.u("uMode"), 0);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (wp > 0 && wp < 1) {
-        gl.blendFunc(gl.ONE, gl.ONE);
-        gl.uniform1f(P.wipe.u("uMode"), 1);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (la > 0) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        var Q = P.quad;
+        gl.useProgram(Q.p);
+        gl.bindBuffer(gl.ARRAY_BUFFER, unit);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform2f(Q.u("uRes"), Wc, Hc);
+        gl.uniform1f(Q.u("uA"), la);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.uniform1i(Q.u("uTex"), 0);
+        parts.forEach(function (o) {
+          var r = o.rect;
+          gl.uniform4f(Q.u("uRect"), vp[0] + (r[0] - vp[0]) * sc, vp[1] + (r[1] - vp[1]) * sc, r[2] * sc, r[3] * sc);
+          gl.bindTexture(gl.TEXTURE_2D, o.tex);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        });
+        gl.disable(gl.BLEND);
       }
-      gl.disable(gl.BLEND);
 
-      // 3 composite: through the glass at the bokeh, through each drop at the focused night
+      // 2 composite: zoom-blurred mark + the highway + flash + tunnel vision
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, cv.width, cv.height);
-      var Cp = P.comp;
-      attribFull(Cp);
-      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.a.t);
-      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, S.b.t);
-      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, S.h.t);
-      gl.uniform1i(Cp.u("uA"), 0);
-      gl.uniform1i(Cp.u("uB"), 1);
-      gl.uniform1i(Cp.u("uH"), 2);
-      gl.uniform2f(Cp.u("uRes"), Wc, Hc);
-      gl.uniform2f(Cp.u("uTx"), 1 / S.h.w, 1 / S.h.h);
-      gl.uniform3f(Cp.u("uW"), W[0], W[1], W[2]);
-      gl.uniform1f(Cp.u("uLens"), 0.085 * Math.min(Wc, Hc));
-      gl.uniform1f(Cp.u("uSlope"), 6);
-      gl.uniform1f(Cp.u("uWet"), spray);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      var C = P.comp;
+      gl.useProgram(C.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, A.t);
+      gl.uniform1i(C.u("uA"), 0);
+      gl.uniform2f(C.u("uRes"), Wc, Hc);
+      gl.uniform2f(C.u("uVP"), vx, vy);
+      gl.uniform1f(C.u("uD"), travel(t) * 2.2);
+      gl.uniform1f(C.u("uV"), v);
+      gl.uniform1f(C.u("uK"), streakK);
+      gl.uniform1f(C.u("uBlur"), blur);
+      gl.uniform1f(C.u("uCA"), blur * 0.03);
+      gl.uniform1f(C.u("uFlash"), fl);
+      gl.uniform1f(C.u("uVig"), 0.55 * v);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
+    var PARTS = null;
     var api = {
       onDone: null,
-      prepare: function (set, mw, PARTS) {
+      prepare: function (set, mw, parts_) {
         if (dead) return false;
+        PARTS = parts_;
         try {
-          layout(set, mw, PARTS);
+          layout(set, mw);
           gl.bindFramebuffer(gl.FRAMEBUFFER, null);
           gl.viewport(0, 0, cv.width, cv.height);
           gl.clearColor(bg[0], bg[1], bg[2], 1);
           gl.clear(gl.COLOR_BUFFER_BIT);
           window.addEventListener("resize", function () {
             if (dead) return;
-            try { layout(set, mw, PARTS); render(lastT); } catch (e) { api.finish(); }
+            try { layout(set, mw); render(lastT); } catch (e) { api.finish(); }
           });
           return true;
         } catch (e) { api.finish(); return false; }
@@ -519,7 +343,7 @@
           if (dead) return;
           var t = (now - t0) / 1000;
           try { render(t); } catch (e) { api.finish(); return; }
-          if (t >= W_T.handoff) api.finish();
+          if (t >= S_T.handoff) api.finish();
           else raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
@@ -527,7 +351,7 @@
       renderAt: function (t) {
         if (dead) return;
         try { render(t); } catch (e) { api.finish(); return; }
-        if (t >= W_T.handoff) api.finish();
+        if (t >= S_T.handoff) api.finish();
       },
       finish: function () {
         if (dead) return;
@@ -639,19 +463,19 @@
     for (var s = 0; s < 6; s++) streaks += '<i class="bi-streak bi-streak' + s + '"></i>';
   }
 
-  // water needs WebGL; without it Autobahn falls back to the line reveal
-  var wcv = null, water = null;
-  if (cfg.water && PARTS && !reduced) {
-    wcv = document.createElement("canvas");
-    wcv.className = "bi-wcv";
-    wcv.setAttribute("aria-hidden", "true");
-    water = makeWater(wcv, bg);
+  // the speed fx needs WebGL; without it Autobahn falls back to the line reveal
+  var fxcv = null, fx = null;
+  if (cfg.speed && PARTS && !reduced) {
+    fxcv = document.createElement("canvas");
+    fxcv.className = "bi-glcv";
+    fxcv.setAttribute("aria-hidden", "true");
+    fx = makeSpeed(fxcv, bg);
   }
-  if (water) T = { pull: W_T.wipe, pullDur: W_T.wipeDur, sub: 1.28, glint: 1.56, rule: 1.26, exit: 2.95, exitDur: 0.55 };
+  if (fx) T = { pull: S_T.zoom, pullDur: S_T.zoomDur, sub: 1.3, glint: 1.56, rule: 1.3, exit: 2.65, exitDur: 0.55 };
 
   var el = document.createElement("div");
   el.id = "brandIntro";
-  el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold") + (water ? " bi-wet" : "");
+  el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold") + (fx ? " bi-gl" : "");
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
   var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + (PARTS ? "" : lockHTML("raw")) + "</div>";
@@ -664,16 +488,16 @@
     : "";
   el.innerHTML = glass
     ? '<div class="bi-pane">' + win("x", setHTML + glassHTML + skipHTML) + "</div>" + bladeHTML("out")
-    : water
+    : fx
     ? '<div class="bi-pane">' + win("x", setHTML + skipHTML) + "</div>" + bladeHTML("out")
     : pull === "cut"
     ? heatFx + '<div class="bi-pane">' + rawHTML + setHTML + skipHTML + "</div>" + '<div class="bi-cutblade"></div>'
     : heatFx + '<div class="bi-pane">' + win("x", rawHTML + win("r", setHTML) + skipHTML) + "</div>" +
       bladeHTML("in") + bladeHTML("out");
-  if (water) {
+  if (fx) {
     var setEl = el.querySelector(".bi-set");
-    setEl.insertBefore(wcv, setEl.firstChild);
-    water.onDone = function () { el.classList.remove("bi-wet"); wcv.style.visibility = "hidden"; };
+    setEl.insertBefore(fxcv, setEl.firstChild);
+    fx.onDone = function () { el.classList.remove("bi-gl"); fxcv.style.visibility = "hidden"; };
   }
 
   // ---------------------------------------------------------------- styles
@@ -710,10 +534,10 @@
     "#brandIntro .bi-strp,#brandIntro .bi-word{will-change:transform}",
     "#brandIntro .bi-bloom{position:absolute;left:22%;right:0;top:-30%;height:105%;z-index:-1;opacity:0;pointer-events:none;" +
     "background:radial-gradient(50% 50% at 55% 60%,rgba(255,30,20,.30),rgba(255,30,20,.10) 45%,transparent 72%)}",
-    // water canvas sits under the DOM lockup; the DOM parts wait for the handoff
-    "#brandIntro .bi-wcv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:0}",
+    // fx canvas sits under the DOM lockup; the DOM parts wait for the handoff
+    "#brandIntro .bi-glcv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:0}",
     "#brandIntro .bi-set .bi-lock{z-index:1}",
-    "#brandIntro.bi-wet .bi-parts .bi-pt{visibility:hidden}",
+    "#brandIntro.bi-gl .bi-parts .bi-pt{visibility:hidden}",
     // kicker (above the mark) — the brand site's own "NO LIMITS" lockup
     "#brandIntro .bi-kick{margin-bottom:clamp(14px,2.2vw,24px);color:" + fg + ";font-family:" + font + ";white-space:nowrap;" +
     "width:max-content;max-width:94vw;position:relative;left:50%;transform:translateX(-50%);" +
@@ -874,11 +698,11 @@
         "#brandIntro .bi-raw .bi-lock{animation:biRise 1.3s ease-in-out infinite alternate}",
         "@keyframes biRise{from{transform:translateY(1.5px)}to{transform:translateY(-1.5px)}}"
       );
-    } else if (pull === "forward" && water) {
+    } else if (pull === "forward" && fx) {
       R.push(
         // the GL drove the stripes; the DOM lockup it hands off to is the parked state
         "#brandIntro .bi-strp .bi-smear{visibility:hidden}",
-        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (W_T.wipe + 0.5) + "s both}",
+        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (S_T.zoom + 0.3) + "s both}",
         "@keyframes biBloom{0%{opacity:0}30%{opacity:1}100%{opacity:.35}}"
       );
     } else if (pull === "forward") {
@@ -1084,9 +908,9 @@
   };
   ready.then(fitText);
   window.addEventListener("resize", fitText);
-  // water: textures + spray pattern are built once everything is decoded
-  if (water) ready.then(function () {
-    water.prepare(el.querySelector(".bi-set"), el.querySelector(".bi-set .bi-parts"), PARTS);
+  // speed fx: textures are built once everything is decoded
+  if (fx) ready.then(function () {
+    fx.prepare(el.querySelector(".bi-set"), el.querySelector(".bi-set .bi-parts"), PARTS);
   });
 
   // ---------------------------------------------------------------- lifecycle
@@ -1098,7 +922,7 @@
   function dismiss() {
     if (done) return;
     done = true;
-    if (water) water.finish(); // a skip mid-spray lands on the finished DOM lockup
+    if (fx) fx.finish(); // a skip mid-rush lands on the finished DOM lockup
     el.classList.remove("bi-hold"); // a skip during the hold must not freeze the exit
     resolveDone(); // the app boots underneath while the pane pulls away
     // the app's panels arrive as they're uncovered (app.css .zt-enter)
@@ -1122,7 +946,7 @@
     if (!reduced && dt >= T.exit * 1000) {
       // freeze the main timeline at its end, then scrub the exit itself
       var EXIT_ANIMS = /^bi(XW[df]|XI[df]|CutClose|BladeOut)$/;
-      ready.then(function () { el.classList.remove("bi-hold"); if (water) water.finish(); requestAnimationFrame(function () {
+      ready.then(function () { el.classList.remove("bi-hold"); if (fx) fx.finish(); requestAnimationFrame(function () {
         el.getAnimations({ subtree: true }).forEach(function (a) {
           try { a.finish(); } catch (e) { a.pause(); } // infinite (streaks) can't finish
         });
@@ -1139,7 +963,7 @@
     } else {
       ready.then(function () {
         el.classList.remove("bi-hold");
-        if (water) water.renderAt(dt / 1000);
+        if (fx) fx.renderAt(dt / 1000);
         requestAnimationFrame(freeze);
       });
     }
@@ -1157,7 +981,7 @@
       if (started) return;
       started = true;
       el.classList.remove("bi-hold");
-      if (water) water.start();
+      if (fx) fx.start();
       if (!done) setTimeout(dismiss, T.exit * 1000);
     };
     ready.then(function () {
