@@ -55,11 +55,11 @@
     // tint = the body (clear-ish centre); edge = thick-glass colour pooling at
     // the rim; rim = lit top edge + hairline + inner bottom shade; spec = the
     // curved top-left highlight; mag = lens magnification of the mark beneath
-    // Hüper: a band, not a slab — full-bleed liquid glass at the old heat
-    // wash's diagonal (165deg ≈ 15° off level), swept down across the mark
-    // fast: one flash of Hüper green with a lit squeegee leading edge.
+    // Hüper: a band, not a slab — wide full-bleed liquid glass at the old heat
+    // wash's diagonal, mirrored (15° off level, high on the left), swept down
+    // across the mark fast: one flash of Hüper green with lit squeegee edges.
     huper: {
-      band: true, ang: -15, at: 0.36, dur: 0.66, ease: "cubic-bezier(.3,.72,.7,.28)", radius: 0, hMul: 1.9, mag: 1.12,
+      band: true, ang: 15, at: 0.42, dur: 0.46, ease: "cubic-bezier(.32,.66,.68,.34)", radius: 0, hMul: 3.1, mag: 1.12,
       tint: "linear-gradient(180deg,rgba(118,182,50,.86),rgba(141,201,72,.66) 46%,rgba(104,168,40,.88))",
       edge: "inset 0 0 24px rgba(60,118,14,.62)",
       rim: "inset 0 2px 0 rgba(255,255,255,.9),inset 0 -2.5px 0 rgba(255,255,255,.98),inset 0 -9px 14px -6px rgba(255,255,255,.75)",
