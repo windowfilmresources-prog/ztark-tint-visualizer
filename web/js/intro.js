@@ -14,7 +14,8 @@
 //                      across, the mark opens out of it, and it contracts into
 //                      the logo's own strike
 // Config-driven from BRANDS[brand].intro; plays every load (masks the stage
-// load); skip on any input; ?introDebug=<ms> freezes for review (values past
+// load); waits until it's actually on screen (iframes below the fold); skip
+// on a tap/click or key; ?introDebug=<ms> freezes for review (values past
 // the exit point freeze the exit too); ?nointro=1 off.
 (function () {
   var qs = new URLSearchParams(location.search);
@@ -884,6 +885,32 @@
       fn();
     });
   }
+  // Iframed on a brand site, the page loads long before anyone scrolls to it
+  // — an opener that plays then is an opener nobody sees. Hold until the
+  // frame is really on screen: most of it, or a solid 420px of it.
+  // IntersectionObserver measures against the top-level viewport even from a
+  // cross-origin iframe; a top-level page (overlay = viewport) passes at once.
+  var inView = false, viewWaiters = [];
+  function whenInView(fn) { if (inView) fn(); else viewWaiters.push(fn); }
+  if ("IntersectionObserver" in window) {
+    var steps = [];
+    for (var q = 0; q <= 20; q++) steps.push(q / 20);
+    var io = new IntersectionObserver(function (entries) {
+      var e = entries[entries.length - 1];
+      var h = e.boundingClientRect.height || window.innerHeight;
+      if (!e.isIntersecting || inView) return;
+      if (e.intersectionRatio < 0.6 && e.intersectionRect.height < Math.min(420, h * 0.95)) return;
+      inView = true;
+      io.disconnect();
+      var w = viewWaiters;
+      viewWaiters = [];
+      w.forEach(function (f) { f(); });
+    }, { threshold: steps });
+    io.observe(el);
+  } else {
+    inView = true;
+  }
+  function whenSeen(fn) { whenVisible(function () { whenInView(fn); }); }
   var ready = new Promise(function (res) {
     var waits = [];
     var pre = new Image();
@@ -898,7 +925,7 @@
       try { jobs.push(document.fonts.load("600 14px " + font).catch(function () {})); } catch (e) {}
     }
     Promise.all(jobs).then(res);
-    whenVisible(function () { setTimeout(res, READY_CAP); });
+    whenSeen(function () { setTimeout(res, READY_CAP); });
   });
 
   // tracked-out taglines must never run off a phone: tighten the tracking
@@ -939,7 +966,7 @@
     setTimeout(finish, reduced ? 380 : T.exitDur * 1000 + 60);
   }
 
-  el.addEventListener("pointerdown", dismiss);
+  el.addEventListener("click", dismiss); // a tap, not a swipe — scrolling past an iframe mustn't skip it
   window.addEventListener("keydown", dismiss, { once: true });
 
   if (debugT) {
@@ -975,7 +1002,7 @@
       });
     }
   } else if (reduced) {
-    ready.then(function () { setTimeout(dismiss, 1100); });
+    ready.then(function () { whenSeen(function () { setTimeout(dismiss, 1100); }); });
   } else {
     // Hold the timeline until the mark is ready AND the overlay has really
     // painted: on a busy load (Autobahn pulls in the 3D engine) the first
@@ -992,7 +1019,7 @@
       if (!done) setTimeout(dismiss, T.exit * 1000);
     };
     ready.then(function () {
-      whenVisible(function () {
+      whenSeen(function () {
         if (done) return;
         requestAnimationFrame(function () { requestAnimationFrame(start); });
         setTimeout(start, 700);
