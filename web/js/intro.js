@@ -79,6 +79,400 @@
     };
   }
 
+  // ---------------------------------------------------------------- water
+  // Autobahn: the installer's first move. Night glass, city lights streaming
+  // past behind it; two pumps of slip solution mist the window (every drop a
+  // tiny lens bending the lights), then an invisible rag wipes it down in one
+  // fast diagonal stroke — no wiper, only what water does: a bead of pushed
+  // water rides the edge, drops get gathered into it, faint rag streaks dry
+  // off — and the mark is on the clean glass, its stripes driving in at speed.
+  // WebGL: drops are splatted into a height field; a composite pass refracts
+  // the scene through it (normals, dark rims, specular). The finished frame
+  // is the DOM lockup pixel-for-pixel, so the canvas hands off invisibly and
+  // its GPU context is released before the 3D viewer boots.
+  var W_T = {
+    bursts: [0.06, 0.2], wind: [0.3, 0.75],
+    wipe: 0.6, wipeDur: 0.5, drive: [0.66, 0.73, 0.8], driveDur: 0.82, word: 0.6, wordDur: 0.9,
+    handoff: 1.66,
+  };
+  function bezier(x1, y1, x2, y2) {
+    // cubic-bezier(x1,y1,x2,y2) as CSS evaluates it: solve x(t)=p, return y(t)
+    function c(a1, a2, t) { return ((1 - 3 * a2 + 3 * a1) * t + (3 * a2 - 6 * a1)) * t * t + 3 * a1 * t; }
+    return function (p) {
+      if (p <= 0) return 0;
+      if (p >= 1) return 1;
+      var lo = 0, hi = 1, t = p;
+      for (var i = 0; i < 24; i++) { var x = c(x1, x2, t); if (x < p) lo = t; else hi = t; t = (lo + hi) / 2; }
+      return c(y1, y2, t);
+    };
+  }
+  function keys(p, k) { // piecewise-linear [[at,val],...]
+    if (p <= k[0][0]) return k[0][1];
+    for (var i = 1; i < k.length; i++) if (p <= k[i][0]) {
+      var a = k[i - 1], b = k[i];
+      return a[1] + (b[1] - a[1]) * (p - a[0]) / (b[0] - a[0]);
+    }
+    return k[k.length - 1][1];
+  }
+  function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+  function makeWater(cv, bgHex) {
+    var gl = null;
+    try {
+      gl = cv.getContext("webgl", { alpha: false, antialias: false, depth: false, stencil: false,
+        premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" });
+    } catch (e) {}
+    if (!gl) return null;
+
+    var VS_FULL = "attribute vec2 p;varying vec2 uv;void main(){uv=p*.5+.5;gl_Position=vec4(p,0.,1.);}";
+    var FS_BG = "precision highp float;varying vec2 uv;uniform vec2 uRes;uniform vec3 uBg;uniform float uK;" +
+      "uniform vec4 uL[7];uniform vec3 uC[7];" +
+      "void main(){vec2 px=vec2(uv.x,1.-uv.y)*uRes;vec3 c=uBg;" +
+      "for(int i=0;i<7;i++){vec2 d=(px-uL[i].xy)/vec2(uL[i].z*uL[i].w,uL[i].z);c+=uC[i]*exp(-dot(d,d))*uK;}" +
+      "gl_FragColor=vec4(c,1.);}";
+    var VS_QUAD = "attribute vec2 q;uniform vec4 uRect;uniform vec2 uRes;varying vec2 vuv;varying vec2 vpx;" +
+      "void main(){vpx=uRect.xy+q*uRect.zw;vuv=q;vec2 n=vpx/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
+    var FS_QUAD = "precision highp float;uniform sampler2D uTex;uniform float uA;uniform float uGhost;uniform vec3 uW;" +
+      "varying vec2 vuv;varying vec2 vpx;" +
+      "void main(){vec4 t=texture2D(uTex,vuv);float s=dot(uW.xy,vpx)-uW.z;float wiped=1.-smoothstep(-4.,3.,s);" +
+      "gl_FragColor=t*(uA*mix(uGhost,1.,wiped));}";
+    var VS_DROP = "attribute vec2 corner;attribute vec4 d0;attribute vec4 d1;" +
+      "uniform float uT;uniform vec2 uRes;uniform vec3 uW;uniform float uWind;varying vec2 vq;varying float vk;" +
+      "void main(){float age=uT-d0.w;float r=age<0.?0.:d0.z*(.6+.4*clamp(age/.07,0.,1.));" +
+      "vec2 pos=d0.xy;pos.x+=d1.y*uWind;float st=1.+d1.x*min(uWind/24.,1.);" +
+      "float s=dot(uW.xy,pos)-uW.z;float carried=max(0.,-s);pos+=uW.xy*carried;r*=exp(-carried/60.);" +
+      "vq=corner;vk=min(1.,d0.z/11.);vec2 px=pos+corner*vec2(r*st,r);vec2 n=px/uRes*2.-1.;gl_Position=vec4(n.x,-n.y,0.,1.);}";
+    var FS_DROP = "precision mediump float;varying vec2 vq;varying float vk;" +
+      "void main(){float d=dot(vq,vq);if(d>1.)discard;gl_FragColor=vec4(sqrt(1.-d)*vk,0.,0.,1.);}";
+    var FS_WIPE = "precision highp float;varying vec2 uv;uniform vec2 uRes;uniform vec3 uW;uniform float uMode;uniform float uAmt;" +
+      "float h1(float n){return fract(sin(n)*43758.5453);}" +
+      "float ns(float x){float i=floor(x),f=fract(x);return mix(h1(i),h1(i+1.),f*f*(3.-2.*f));}" +
+      "void main(){vec2 px=vec2(uv.x,1.-uv.y)*uRes;float s=dot(uW.xy,px)-uW.z;" +
+      "if(uMode<.5){gl_FragColor=vec4(smoothstep(-1.,3.,s));return;}" +
+      "float al=dot(vec2(-uW.y,uW.x),px);float wob=.6+.35*ns(al*.045)+.2*ns(al*.21);" +
+      "float bead=exp(-pow((s-6.)/5.5,2.))*wob*.9;" +
+      "float streak=s<0.?smoothstep(.55,1.,ns(al*.06+7.))*.07*exp(s/28.):0.;" +
+      "gl_FragColor=vec4((bead+streak)*uAmt,0.,0.,1.);}";
+    var FS_COMP = "precision highp float;varying vec2 uv;uniform sampler2D uScene;uniform sampler2D uH;" +
+      "uniform vec2 uRes;uniform vec2 uTx;uniform vec3 uW;uniform float uRefr;uniform float uSlope;uniform float uWet;" +
+      "float H(vec2 p){return texture2D(uH,p).r;}" +
+      "void main(){float hc=H(uv);" +
+      "vec2 g=vec2(H(uv+vec2(uTx.x,0.))-H(uv-vec2(uTx.x,0.)),H(uv+vec2(0.,uTx.y))-H(uv-vec2(0.,uTx.y)));" +
+      "vec3 n=normalize(vec3(-g*uSlope,1.));float w=smoothstep(.012,.08,hc);" +
+      "vec2 o=n.xy*uRefr/uRes;vec3 c=texture2D(uScene,uv+o).rgb;" +
+      "vec2 px=vec2(uv.x,1.-uv.y)*uRes;float ws=smoothstep(-2.,8.,dot(uW.xy,px)-uW.z)*uWet;" +
+      "vec2 b=3.5/uRes;vec2 e=vec2(b.x*1.9,0.);vec2 f=vec2(0.,b.y*1.9);" +
+      "vec3 bl=(texture2D(uScene,uv+o+b).rgb+texture2D(uScene,uv+o-b).rgb+" +
+      "texture2D(uScene,uv+o+vec2(b.x,-b.y)).rgb+texture2D(uScene,uv+o+vec2(-b.x,b.y)).rgb+" +
+      "texture2D(uScene,uv+o+e).rgb+texture2D(uScene,uv+o-e).rgb+texture2D(uScene,uv+o+f).rgb+texture2D(uScene,uv+o-f).rgb)*.125;" +
+      "c=mix(c,bl,ws*.9);c+=vec3(.022,.023,.027)*ws;" +
+      "float sl=length(n.xy);c*=1.-.6*smoothstep(.45,.9,sl)*w;" +
+      "c+=vec3(.85,.9,1.)*(.5+.5*n.y)*.05*w;" +
+      "vec3 L=normalize(vec3(-.5,.6,.65));c+=vec3(1.,.97,.94)*pow(max(dot(n,L),0.),70.)*.9*w;" +
+      "gl_FragColor=vec4(c,1.);}";
+
+    function sh(type, src) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    }
+    function prog(vs, fs, attrs) {
+      var p = gl.createProgram();
+      gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+      gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+      attrs.forEach(function (a, i) { gl.bindAttribLocation(p, i, a); });
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      var cache = {};
+      return { p: p, u: function (n) { return n in cache ? cache[n] : (cache[n] = gl.getUniformLocation(p, n)); } };
+    }
+    var P;
+    try {
+      P = {
+        bg: prog(VS_FULL, FS_BG, ["p"]), quad: prog(VS_QUAD, FS_QUAD, ["q"]),
+        drop: prog(VS_DROP, FS_DROP, ["corner", "d0", "d1"]), wipe: prog(VS_FULL, FS_WIPE, ["p"]),
+        comp: prog(VS_FULL, FS_COMP, ["p"]),
+      };
+    } catch (e) { return null; }
+
+    var tri = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    var unit = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, unit);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+    var dropBuf = gl.createBuffer(), dropN = 0;
+
+    function tex(w, h, src) {
+      var t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      if (src) {
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      }
+      return t;
+    }
+    function fbo(w, h) {
+      var t = tex(w, h, null), f = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return { t: t, f: f, w: w, h: h };
+    }
+    function free(o) { if (o) { gl.deleteTexture(o.t); if (o.f) gl.deleteFramebuffer(o.f); } }
+
+    // seeded so every load sprays the same handsome pattern
+    function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+    function genDrops(Wc, Hc) {
+      var r = rng(7), area = Wc * Hc;
+      var gauss = function () { return Math.sqrt(-2 * Math.log(r() || 1e-6)) * Math.cos(6.2832 * r()); };
+      var bursts = [{ x: 0.3 * Wc, y: 0.44 * Hc, t: W_T.bursts[0] }, { x: 0.7 * Wc, y: 0.54 * Hc, t: W_T.bursts[1] }];
+      // [count, rMin, rMax, kind]: fine mist, droplets, a few fat drops
+      var groups = [[area / 190, 0.9, 2.8, 0], [area / 2300, 3, 7.5, 1], [area / 26000, 8.5, 15, 2]];
+      var corners = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1], out = [];
+      groups.forEach(function (g) {
+        var n = Math.round(g[0]);
+        for (var i = 0; i < n; i++) {
+          var b = bursts[r() < 0.5 ? 0 : 1], x, y;
+          if (r() < 0.72) { x = b.x + gauss() * 0.3 * Wc; y = b.y + gauss() * 0.32 * Hc; }
+          else { x = r() * Wc; y = r() * Hc; }
+          x = Math.max(-20, Math.min(Wc + 20, x)); y = Math.max(-20, Math.min(Hc + 20, y));
+          var rad = g[1] + (g[2] - g[1]) * r() * r();
+          var t0 = b.t + Math.hypot(x - b.x, y - b.y) / 3000 + r() * 0.07;
+          var st = g[3] ? (0.3 + r() * 0.9) * (0.5 + g[3] / 2) : 0, dr = g[3] ? r() : 0;
+          for (var k = 0; k < 6; k++) out.push(corners[k * 2], corners[k * 2 + 1], x, y, rad, t0, st, dr, 0, 0);
+        }
+      });
+      dropN = out.length / 10;
+      gl.bindBuffer(gl.ARRAY_BUFFER, dropBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.STATIC_DRAW);
+    }
+
+    // night lights passing behind the glass: x, y (frac), radius (frac of min side), stretch, colour
+    var LIGHTS = [
+      [0.10, 0.36, 0.07, 3.5, [0.55, 0.06, 0.04]], [0.42, 0.62, 0.05, 4.2, [0.5, 0.05, 0.03]],
+      [0.66, 0.30, 0.09, 3.0, [0.45, 0.26, 0.07]], [0.88, 0.70, 0.06, 4.6, [0.30, 0.32, 0.40]],
+      [1.15, 0.48, 0.11, 2.6, [0.40, 0.18, 0.05]], [1.32, 0.78, 0.05, 4.0, [0.55, 0.07, 0.04]],
+      [1.50, 0.22, 0.06, 3.6, [0.20, 0.26, 0.42]],
+    ];
+    var bg = [parseInt(bgHex.slice(1, 3), 16) / 255, parseInt(bgHex.slice(3, 5), 16) / 255, parseInt(bgHex.slice(5, 7), 16) / 255];
+    var ease = { wipe: bezier(0.45, 0, 0.2, 1), drive: bezier(0.16, 1, 0.3, 1) };
+
+    var S = null, parts = [], dpr = 1, Wc = 0, Hc = 0, wipeN = [0, 0], cMin = 0, cMax = 0;
+    var raf = 0, t0 = 0, lastT = 0, dead = false;
+
+    function layout(set, mw, PARTS) {
+      Wc = set.clientWidth; Hc = set.clientHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      cv.width = Math.round(Wc * dpr); cv.height = Math.round(Hc * dpr);
+      free(S && S.scene); free(S && S.h);
+      var hs = Math.min(1, 1.25 / dpr);
+      S = { scene: fbo(cv.width, cv.height), h: fbo(Math.round(cv.width * hs), Math.round(cv.height * hs)) };
+      var lk = mw.offsetParent, mx = lk.offsetLeft + mw.offsetLeft, my = lk.offsetTop + mw.offsetTop;
+      var k = mw.offsetWidth / PARTS.w;
+      parts.forEach(function (q) { gl.deleteTexture(q.tex); if (q.stex) gl.deleteTexture(q.stex); });
+      var imgs = mw.querySelectorAll("img");
+      // each layer pre-scaled by the browser to its on-screen size (crisp, no NPOT mip issue)
+      var raster = function (img, w, h) {
+        var c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr));
+        var x = c.getContext("2d");
+        x.imageSmoothingQuality = "high";
+        x.drawImage(img, 0, 0, c.width, c.height);
+        return tex(0, 0, c);
+      };
+      var ii = 0;
+      parts = PARTS.parts.map(function (q) {
+        var o = { rect: [mx + q.x * k, my + q.y * k, q.w * k, q.h * k], stripe: !!q.smear };
+        if (q.smear) { // markup order per stripe: smear, then sharp
+          o.srect = [o.rect[0] - q.padL * k, o.rect[1], (q.w + q.padL + q.padR) * k, o.rect[3]];
+          o.stex = raster(imgs[ii++], o.srect[2], o.srect[3]);
+        }
+        o.tex = raster(imgs[ii++], o.rect[2], o.rect[3]);
+        return o;
+      });
+      // the wipe: a front leaning like the exit line, travelling right
+      var a = 12 * Math.PI / 180;
+      wipeN = [Math.cos(a), Math.sin(a)];
+      var ds = [0, wipeN[0] * Wc, wipeN[1] * Hc, wipeN[0] * Wc + wipeN[1] * Hc];
+      cMin = Math.min.apply(null, ds) - 40; cMax = Math.max.apply(null, ds) + 140;
+      genDrops(Wc, Hc);
+    }
+
+    function attribFull(prg) {
+      gl.useProgram(prg.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    }
+    function quad(texId, rect, a, ghost, W) {
+      var q = P.quad;
+      gl.uniform4f(q.u("uRect"), rect[0], rect[1], rect[2], rect[3]);
+      gl.uniform1f(q.u("uA"), a);
+      gl.uniform1f(q.u("uGhost"), ghost);
+      gl.uniform3f(q.u("uW"), W[0], W[1], W[2]);
+      gl.bindTexture(gl.TEXTURE_2D, texId);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    function render(t) {
+      lastT = t;
+      var wp = ease.wipe(clamp01((t - W_T.wipe) / W_T.wipeDur));
+      var W = [wipeN[0], wipeN[1], cMin + (cMax - cMin) * wp];
+      var spray = clamp01((t - W_T.bursts[0]) / 0.4);
+      var wind = Math.pow(clamp01((t - W_T.wind[0]) / (W_T.wind[1] - W_T.wind[0])), 2) * 26;
+      var lightsK = 1 - clamp01((t - W_T.wipe) / 0.65);
+      gl.disable(gl.BLEND);
+
+      // 1 scene: night lights + the mark (ghosted under the water, whole where wiped)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, S.scene.f);
+      gl.viewport(0, 0, S.scene.w, S.scene.h);
+      attribFull(P.bg);
+      gl.uniform2f(P.bg.u("uRes"), Wc, Hc);
+      gl.uniform3f(P.bg.u("uBg"), bg[0], bg[1], bg[2]);
+      gl.uniform1f(P.bg.u("uK"), lightsK);
+      var L = [], C = [], m = Math.min(Wc, Hc);
+      LIGHTS.forEach(function (l) {
+        var span = Wc * 1.9, x = ((l[0] * Wc - t * Wc * 1.5) % span + span) % span - Wc * 0.35;
+        L.push(x, l[1] * Hc, l[2] * m, l[3]); C.push(l[4][0], l[4][1], l[4][2]);
+      });
+      gl.uniform4fv(P.bg.u("uL"), L);
+      gl.uniform3fv(P.bg.u("uC"), C);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(P.quad.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, unit);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(P.quad.u("uRes"), Wc, Hc);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.uniform1i(P.quad.u("uTex"), 0);
+      var si = 0;
+      parts.forEach(function (o) {
+        if (!o.stripe) {
+          var wpp = ease.drive(clamp01((t - W_T.word) / W_T.wordDur));
+          var dx = -0.04 * o.rect[2] * (1 - wpp);
+          quad(o.tex, [o.rect[0] + dx, o.rect[1], o.rect[2], o.rect[3]], 1, 0.12 * spray, W);
+          return;
+        }
+        var p = clamp01((t - W_T.drive[si++]) / W_T.driveDur);
+        var off = -0.95 * o.rect[2] * (1 - ease.drive(p));
+        var sa = keys(p, [[0, 1], [0.3, 0.9], [0.62, 0], [1, 0]]);
+        var ha = keys(p, [[0, 0], [0.26, 0], [0.58, 1], [1, 1]]);
+        if (sa > 0) quad(o.stex, [o.srect[0] + off, o.srect[1], o.srect[2], o.srect[3]], sa, 0, W);
+        if (ha > 0) quad(o.tex, [o.rect[0] + off, o.rect[1], o.rect[2], o.rect[3]], ha, 0, W);
+      });
+
+      // 2 water height field: drops (additive) → wiped side erased → bead + rag streaks
+      gl.bindFramebuffer(gl.FRAMEBUFFER, S.h.f);
+      gl.viewport(0, 0, S.h.w, S.h.h);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      var D = P.drop;
+      gl.useProgram(D.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, dropBuf);
+      gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1); gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 40, 0);
+      gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 40, 8);
+      gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 40, 24);
+      gl.uniform1f(D.u("uT"), t);
+      gl.uniform2f(D.u("uRes"), Wc, Hc);
+      gl.uniform3f(D.u("uW"), W[0], W[1], W[2]);
+      gl.uniform1f(D.u("uWind"), wind);
+      gl.drawArrays(gl.TRIANGLES, 0, dropN);
+      gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
+
+      attribFull(P.wipe);
+      gl.uniform2f(P.wipe.u("uRes"), Wc, Hc);
+      gl.uniform3f(P.wipe.u("uW"), W[0], W[1], W[2]);
+      gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
+      gl.uniform1f(P.wipe.u("uMode"), 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (wp > 0 && wp < 1) {
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.uniform1f(P.wipe.u("uMode"), 1);
+        gl.uniform1f(P.wipe.u("uAmt"), 1);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      gl.disable(gl.BLEND);
+
+      // 3 composite: look at the scene through the water
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, cv.width, cv.height);
+      var Cp = P.comp;
+      attribFull(Cp);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.scene.t);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, S.h.t);
+      gl.uniform1i(Cp.u("uScene"), 0);
+      gl.uniform1i(Cp.u("uH"), 1);
+      gl.uniform2f(Cp.u("uRes"), Wc, Hc);
+      gl.uniform2f(Cp.u("uTx"), 1 / S.h.w, 1 / S.h.h);
+      gl.uniform3f(Cp.u("uW"), W[0], W[1], W[2]);
+      gl.uniform1f(Cp.u("uRefr"), 22);
+      gl.uniform1f(Cp.u("uSlope"), 6);
+      gl.uniform1f(Cp.u("uWet"), spray);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+
+    var api = {
+      onDone: null,
+      prepare: function (set, mw, PARTS) {
+        if (dead) return false;
+        try {
+          layout(set, mw, PARTS);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, cv.width, cv.height);
+          gl.clearColor(bg[0], bg[1], bg[2], 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          window.addEventListener("resize", function () {
+            if (dead) return;
+            try { layout(set, mw, PARTS); render(lastT); } catch (e) { api.finish(); }
+          });
+          return true;
+        } catch (e) { api.finish(); return false; }
+      },
+      start: function () {
+        if (dead) return;
+        t0 = performance.now();
+        var tick = function (now) {
+          if (dead) return;
+          var t = (now - t0) / 1000;
+          try { render(t); } catch (e) { api.finish(); return; }
+          if (t >= W_T.handoff) api.finish();
+          else raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      },
+      renderAt: function (t) {
+        if (dead) return;
+        try { render(t); } catch (e) { api.finish(); return; }
+        if (t >= W_T.handoff) api.finish();
+      },
+      finish: function () {
+        if (dead) return;
+        dead = true;
+        cancelAnimationFrame(raf);
+        if (api.onDone) api.onDone();
+        // give the GPU back before the 3D viewer boots
+        var lose = gl.getExtension("WEBGL_lose_context");
+        setTimeout(function () { if (lose) lose.loseContext(); cv.width = cv.height = 1; }, 60);
+      },
+    };
+    cv.addEventListener("webglcontextlost", function () { api.finish(); });
+    return api;
+  }
+
   // ---------------------------------------------------------------- markup
 
   // Autobahn: the official lockup (autobahnwindowfilms.com, 1500w) split into
@@ -175,9 +569,19 @@
     for (var s = 0; s < 6; s++) streaks += '<i class="bi-streak bi-streak' + s + '"></i>';
   }
 
+  // water needs WebGL; without it Autobahn falls back to the line reveal
+  var wcv = null, water = null;
+  if (cfg.water && PARTS && !reduced) {
+    wcv = document.createElement("canvas");
+    wcv.className = "bi-wcv";
+    wcv.setAttribute("aria-hidden", "true");
+    water = makeWater(wcv, bg);
+  }
+  if (water) T = { pull: W_T.wipe, pullDur: W_T.wipeDur, sub: 1.12, glint: 1.42, rule: 1.1, exit: 2.8, exitDur: 0.55 };
+
   var el = document.createElement("div");
   el.id = "brandIntro";
-  el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold");
+  el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold") + (water ? " bi-wet" : "");
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
   var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + (PARTS ? "" : lockHTML("raw")) + "</div>";
@@ -190,10 +594,17 @@
     : "";
   el.innerHTML = glass
     ? '<div class="bi-pane">' + win("x", setHTML + glassHTML + skipHTML) + "</div>" + bladeHTML("out")
+    : water
+    ? '<div class="bi-pane">' + win("x", setHTML + skipHTML) + "</div>" + bladeHTML("out")
     : pull === "cut"
     ? heatFx + '<div class="bi-pane">' + rawHTML + setHTML + skipHTML + "</div>" + '<div class="bi-cutblade"></div>'
     : heatFx + '<div class="bi-pane">' + win("x", rawHTML + win("r", setHTML) + skipHTML) + "</div>" +
       bladeHTML("in") + bladeHTML("out");
+  if (water) {
+    var setEl = el.querySelector(".bi-set");
+    setEl.insertBefore(wcv, setEl.firstChild);
+    water.onDone = function () { el.classList.remove("bi-wet"); wcv.style.visibility = "hidden"; };
+  }
 
   // ---------------------------------------------------------------- styles
   var ease = "cubic-bezier(.62,.02,.28,1)"; // grip, drive, settle — a real squeegee stroke
@@ -229,6 +640,10 @@
     "#brandIntro .bi-strp,#brandIntro .bi-word{will-change:transform}",
     "#brandIntro .bi-bloom{position:absolute;left:22%;right:0;top:-30%;height:105%;z-index:-1;opacity:0;pointer-events:none;" +
     "background:radial-gradient(50% 50% at 55% 60%,rgba(255,30,20,.30),rgba(255,30,20,.10) 45%,transparent 72%)}",
+    // water canvas sits under the DOM lockup; the DOM parts wait for the handoff
+    "#brandIntro .bi-wcv{position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:0}",
+    "#brandIntro .bi-set .bi-lock{z-index:1}",
+    "#brandIntro.bi-wet .bi-parts .bi-pt{visibility:hidden}",
     // kicker (above the mark) — the brand site's own "NO LIMITS" lockup
     "#brandIntro .bi-kick{margin-bottom:clamp(14px,2.2vw,24px);color:" + fg + ";font-family:" + font + ";white-space:nowrap;" +
     "width:max-content;max-width:94vw;position:relative;left:50%;transform:translateX(-50%);" +
@@ -388,6 +803,13 @@
         // frozen heat warp still breathes: a slow composited rise
         "#brandIntro .bi-raw .bi-lock{animation:biRise 1.3s ease-in-out infinite alternate}",
         "@keyframes biRise{from{transform:translateY(1.5px)}to{transform:translateY(-1.5px)}}"
+      );
+    } else if (pull === "forward" && water) {
+      R.push(
+        // the GL drove the stripes; the DOM lockup it hands off to is the parked state
+        "#brandIntro .bi-strp .bi-smear{visibility:hidden}",
+        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (W_T.wipe + 0.5) + "s both}",
+        "@keyframes biBloom{0%{opacity:0}30%{opacity:1}100%{opacity:.35}}"
       );
     } else if (pull === "forward") {
       R.push(
@@ -592,6 +1014,10 @@
   };
   ready.then(fitText);
   window.addEventListener("resize", fitText);
+  // water: textures + spray pattern are built once everything is decoded
+  if (water) ready.then(function () {
+    water.prepare(el.querySelector(".bi-set"), el.querySelector(".bi-set .bi-parts"), PARTS);
+  });
 
   // ---------------------------------------------------------------- lifecycle
   var done = false;
@@ -602,6 +1028,7 @@
   function dismiss() {
     if (done) return;
     done = true;
+    if (water) water.finish(); // a skip mid-spray lands on the finished DOM lockup
     el.classList.remove("bi-hold"); // a skip during the hold must not freeze the exit
     resolveDone(); // the app boots underneath while the pane pulls away
     // the app's panels arrive as they're uncovered (app.css .zt-enter)
@@ -625,7 +1052,7 @@
     if (!reduced && dt >= T.exit * 1000) {
       // freeze the main timeline at its end, then scrub the exit itself
       var EXIT_ANIMS = /^bi(XW[df]|XI[df]|CutClose|BladeOut)$/;
-      ready.then(function () { el.classList.remove("bi-hold"); requestAnimationFrame(function () {
+      ready.then(function () { el.classList.remove("bi-hold"); if (water) water.finish(); requestAnimationFrame(function () {
         el.getAnimations({ subtree: true }).forEach(function (a) {
           try { a.finish(); } catch (e) { a.pause(); } // infinite (streaks) can't finish
         });
@@ -640,7 +1067,11 @@
         });
       }); });
     } else {
-      ready.then(function () { el.classList.remove("bi-hold"); requestAnimationFrame(freeze); });
+      ready.then(function () {
+        el.classList.remove("bi-hold");
+        if (water) water.renderAt(dt / 1000);
+        requestAnimationFrame(freeze);
+      });
     }
   } else if (reduced) {
     ready.then(function () { setTimeout(dismiss, 1100); });
@@ -656,6 +1087,7 @@
       if (started) return;
       started = true;
       el.classList.remove("bi-hold");
+      if (water) water.start();
       if (!done) setTimeout(dismiss, T.exit * 1000);
     };
     ready.then(function () {
