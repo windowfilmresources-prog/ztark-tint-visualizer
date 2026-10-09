@@ -5,8 +5,9 @@
 // is revealed crisp behind it; the exit pulls the pane away to hand off to
 // the app. Each brand plays the same stroke in its own language:
 //   down    (Hüper)    heat shimmer + warm glare, film pulled down the pane
-//   forward (Autobahn) night flare + speed streaks, fast forward-leaning pull,
-//                      road lanes draw in the wake
+//   forward (Autobahn) night + speed streaks; a hot diagonal line sweeps across
+//                      and reveals the official lockup — the stripes drive in
+//                      at speed (motion-smeared) and lock into place
 //   cut     (Edge)     cold glare; the navy strike-line is the blade — it cuts
 //                      across, the mark opens out of it, and it contracts into
 //                      the logo's own strike
@@ -26,7 +27,7 @@
   var debugT = qs.get("introDebug");
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  var pull = cfg.pull || (cfg.kind === "strike" ? "cut" : cfg.roadVector ? "forward" : "down");
+  var pull = cfg.pull || (cfg.kind === "strike" ? "cut" : "down");
   var bg = cfg.bg || "#0a0a0b";
   var fg = cfg.fg || "#fff";
   var dim = cfg.dim || "rgba(255,255,255,.35)";
@@ -38,16 +39,16 @@
   // (seconds) one place to tune the whole choreography per pull style
   var T = {
     down:    { pull: 0.30, pullDur: 0.95, rule: 1.02, sub: 1.12, glint: 1.72, exit: 2.55, exitDur: 0.62 },
-    forward: { pull: 0.34, pullDur: 0.62, rule: 0.86, sub: 0.98, glint: 1.62, exit: 2.45, exitDur: 0.55 },
+    forward: { pull: 0.28, pullDur: 0.60, rule: 0.90, sub: 1.00, glint: 1.30, exit: 2.50, exitDur: 0.55 },
     cut:     { blade: 0.14, bladeDur: 0.46, pull: 0.50, pullDur: 0.68, land: 0.98, landDur: 0.52,
                sub: 1.30, glint: 1.80, exit: 2.55, exitDur: 0.55 },
   }[pull];
 
   // ---------------------------------------------------------------- glass
-  // Hüper + Autobahn: the mark is already there; brand-tinted "liquid glass"
+  // Hüper: the mark is already there; brand-tinted "liquid glass"
   // crosses it at an angle — the mark seen through it refracts (magnified,
   // softened, tinted) — then the mark shimmers. Hüper is a quick diagonal band
-  // (a flash of green); Autobahn is a red slab. Edge keeps its cut.
+  // (a flash of green). (Autobahn tried a red slab: wrong for the brand.)
   // No backdrop-filter (that's what makes glass UI laggy): the slab carries its
   // own pre-filtered copy of the mark that counter-slides to stay aligned, so
   // the refraction is a static raster the GPU only has to move.
@@ -67,18 +68,6 @@
       refract: "blur(1.2px) saturate(1.7) brightness(1.08)",
       spec: 0.0, sheenBg: "linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,0) 22%,rgba(255,255,255,0) 70%,rgba(255,255,255,.42) 100%)",
     },
-    // Autobahn: brand-red glass. (Smoked/dark glass was invisible on the black
-    // field — it read as a static logo, i.e. "unchanged".) Glass on black is
-    // only seen by its light: lit rim, edge-pooled red, glow, specular.
-    autobahn: {
-      ang: -10, at: 0.28, dur: 1.15, ease: "cubic-bezier(.2,.8,.8,.2)", radius: 34, wFrac: 0.5, hMul: 2.15, mag: 1.12,
-      tint: "linear-gradient(158deg,rgba(255,74,52,.34),rgba(196,18,16,.18) 50%,rgba(255,96,44,.32))",
-      edge: "inset 0 0 36px rgba(255,40,24,.66)",
-      rim: "inset 0 1.5px 0 rgba(255,226,216,.95),inset 0 0 0 1.5px rgba(255,142,112,.72),inset 0 -3px 10px rgba(80,0,0,.45)",
-      drop: "0 0 64px -4px rgba(255,40,24,.58),0 0 130px -12px rgba(255,30,20,.36)",
-      refract: "blur(1.6px) saturate(1.35) brightness(1.06)",
-      spec: 0.55, sheen: "rgba(255,255,255,.62)",
-    },
   };
   var glass = cfg.glass === false ? null : (GLASS[brandId] || null);
   if (glass) {
@@ -91,19 +80,46 @@
   }
 
   // ---------------------------------------------------------------- markup
-  var ROAD_SVG =
-    '<div class="bi-road" aria-hidden="true"><svg class="bi-lane bi-lane0" viewBox="0 0 1200 348"><defs><mask id="biM0"><path d="M 191 393 L 161 330 L 152 312 L 148 294 L 144 276 L 143 258 L 144 240 L 147 222 L 154 204 L 162 186 L 176 168 L 192 150 L 214 132 L 242 114 L 340 82 L 370 73 L 400 66 L 430 61 L 460 58 L 490 54 L 520 52 L 550 50 L 580 48 L 610 47 L 640 46 L 670 46 L 700 46 L 730 47 L 760 48 L 810 48" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="310" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine0"/></mask></defs><g mask="url(#biM0)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M5455 3059 c-1083 -30 -2107 -165 -2817 -370 -919 -265 -1573 -655 -2043 -1219 -222 -267 -421 -682 -476 -994 -20 -114 -26 -285 -10 -302 6 -5 573 -8 1512 -6 l1502 2 -49 53 c-100 106 -361 487 -441 644 -360 703 48 1361 1057 1706 717 246 1827 370 3555 397 761 12 845 17 585 36 -749 54 -1633 74 -2375 53z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane1" viewBox="0 0 1200 348"><defs><mask id="biM1"><path d="M 356 211 L 425 221 L 450 224 L 475 228 L 500 224 L 525 219 L 550 205 L 575 202 L 600 204 L 625 203 L 650 201 L 675 192 L 651 115 L 670 100 L 699 85 L 800 68 L 825 66 L 850 65 L 875 64 L 900 64 L 925 64 L 950 64 L 1000 65" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="320" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine1"/></mask></defs><g mask="url(#biM1)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M7640 2883 c-30 -1 -152 -7 -270 -13 -384 -19 -1125 -79 -1435 -116 -358 -42 -569 -101 -605 -168 -6 -13 -13 -48 -14 -79 -3 -75 -16 -87 -144 -138 -699 -278 -1037 -680 -991 -1180 30 -322 242 -676 579 -968 l65 -56 1284 3 1285 2 -210 126 c-708 424 -1124 775 -1220 1029 -101 271 -67 447 126 636 391 382 1084 631 2140 768 396 51 991 91 1380 91 420 1 205 22 -560 55 -290 13 -1218 18 -1410 8z" fill="#ff0a0c"/></g></g></g></svg><svg class="bi-lane bi-lane2" viewBox="0 0 1200 348"><defs><mask id="biM2"><path d="M 1250 334 L 1180 328 L 1155 326 L 1130 324 L 1105 322 L 1080 320 L 1055 302 L 1030 290 L 1005 281 L 980 274 L 955 269 L 930 264 L 905 261 L 880 256 L 855 252 L 830 248 L 805 242 L 780 231 L 755 213 L 730 204 L 705 200 L 680 195 L 655 191 L 606 183" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="#fff" stroke-width="300" stroke-linecap="butt" stroke-linejoin="round" class="bi-spine bi-spine2"/></mask></defs><g mask="url(#biM2)"><g><g transform="translate(0,348) scale(0.1,-0.1)"><path d="M9605 2704 c-33 -2 -152 -8 -265 -14 -1070 -56 -2197 -307 -2606 -580 -106 -71 -250 -218 -292 -297 -53 -101 -59 -261 -15 -398 110 -341 527 -714 1280 -1145 l191 -110 2051 0 c1195 0 2051 4 2051 9 0 5 -10 11 -22 14 -31 8 -282 56 -343 67 -398 68 -1052 192 -1900 361 -1106 220 -1764 482 -2091 832 -121 128 -153 267 -93 397 85 182 418 394 830 528 464 151 1174 259 1918 292 130 6 265 14 301 18 l65 6 -100 7 c-119 8 -874 18 -960 13z" fill="#ffcf00"/></g></g></g></svg></div>';
+
+  // Autobahn: the official lockup (autobahnwindowfilms.com, 1500w) split into
+  // registered layers — wordmark + the three stripes, each with a pre-rendered
+  // horizontal motion smear (trailing left) for the drive-in. Pixel boxes.
+  var PARTS = cfg.parts === "autobahn" ? {
+    w: 1500, h: 501, parts: [
+      { src: "assets/intro-ab-word.png", x: 0, y: 251, w: 1500, h: 250 },
+      { src: "assets/intro-ab-s0.png", smear: "assets/intro-ab-s0-smear.png", x: 414, y: 0, w: 674, h: 250, padL: 156, padR: 6 },
+      { src: "assets/intro-ab-s1.png", smear: "assets/intro-ab-s1-smear.png", x: 764, y: 15, w: 482, h: 235, padL: 156, padR: 6 },
+      { src: "assets/intro-ab-s2.png", smear: "assets/intro-ab-s2-smear.png", x: 953, y: 29, w: 485, h: 222, padL: 156, padR: 6 },
+    ],
+  } : null;
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
 
   // the mark itself — identical structure in both layers so the raw (glare)
   // and set (filmed) marks sit pixel-for-pixel on top of each other
-  var LOGO_DIMS = { "assets/intro-huper-word.png": [765, 125], "assets/plate-autobahn.png": [1200, 208] };
+  var LOGO_DIMS = { "assets/intro-huper-word.png": [765, 125] };
   var dimAttr = LOGO_DIMS[cfg.logo] ? ' width="' + LOGO_DIMS[cfg.logo][0] + '" height="' + LOGO_DIMS[cfg.logo][1] + '"' : "";
   function markHTML(layer) {
     var glint = layer === "set"
       ? '<div class="bi-glint" style="-webkit-mask-image:url(\'' + cfg.logo + '\');mask-image:url(\'' + cfg.logo + '\')"><span></span></div>'
       : "";
+    if (PARTS) {
+      // layered lockup: every piece placed in the lockup's own pixel space, so
+      // the assembled mark is the official artwork exactly
+      var pc = function (v, of) { return (v / of * 100).toFixed(4) + "%"; };
+      var h = '<div class="bi-markwrap bi-parts" style="aspect-ratio:' + PARTS.w + "/" + PARTS.h + '">';
+      PARTS.parts.forEach(function (q, i) {
+        var box = "left:" + pc(q.x, PARTS.w) + ";top:" + pc(q.y, PARTS.h) + ";width:" + pc(q.w, PARTS.w) + ";height:" + pc(q.h, PARTS.h);
+        if (!q.smear) {
+          h += '<img class="bi-pt bi-word" src="' + q.src + '" style="' + box + '" alt="" draggable="false">';
+          return;
+        }
+        h += '<div class="bi-pt bi-strp bi-strp' + (i - 1) + '" style="' + box + '">' +
+          '<img class="bi-smear" src="' + q.smear + '" style="left:' + pc(-q.padL, q.w) + ";width:" + pc(q.w + q.padL + q.padR, q.w) + '" alt="" draggable="false">' +
+          '<img class="bi-sharp" src="' + q.src + '" alt="" draggable="false"></div>';
+      });
+      return h + '<div class="bi-bloom"></div>' + glint + "</div>";
+    }
     if (pull === "cut") {
       return '<div class="bi-markwrap"><div class="bi-mark" style="background-image:url(\'' + cfg.logo + '\')"></div>' + glint + "</div>";
     }
@@ -111,30 +127,23 @@
       '<img class="bi-mark-img" src="' + cfg.logo + '"' + dimAttr + ' alt="" draggable="false">' + glint + "</div>";
   }
 
-  function subHTML() {
-    if (!cfg.sub) return "";
+  function charsHTML(text, cls) {
+    if (!text) return "";
     var out = "";
-    var chars = Array.from(cfg.sub);
+    var chars = Array.from(text);
     for (var i = 0; i < chars.length; i++) {
       var c = chars[i] === " " ? "&nbsp;" : esc(chars[i]);
       out += '<span style="--i:' + i + '">' + c + "</span>";
     }
-    return '<div class="bi-sub">' + out + "</div>";
+    return '<div class="' + cls + '">' + out + "</div>";
   }
 
   function lockHTML(layer) {
-    // the lanes live in the set layer ONLY: their masks use fixed ids, and a
-    // second copy would make url(#biM0) resolve to the raw layer's unanimated
-    // mask. The raw layer keeps an empty box so both lockups stay aligned.
-    var road = !cfg.roadVector ? "" :
-      layer === "set" ? ROAD_SVG :
-      layer === "copy" ? ROAD_SVG.replace(/biM(\d)/g, "biMg$1") :
-      '<div class="bi-road"></div>';
     return '<div class="bi-lock">' +
-      road +
+      charsHTML(cfg.kicker, "bi-kick") +
       markHTML(layer) +
       (cfg.rule === false ? "" : '<div class="bi-rule"></div>') +
-      subHTML() +
+      charsHTML(cfg.sub, "bi-sub") +
       "</div>";
   }
 
@@ -171,7 +180,7 @@
   el.className = "bi-" + pull + (reduced ? " bi-reduced" : " bi-hold");
   el.setAttribute("role", "presentation");
   el.setAttribute("aria-hidden", "true");
-  var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + lockHTML("raw") + "</div>";
+  var rawHTML = '<div class="bi-raw"><div class="bi-glare"></div>' + streaks + (PARTS ? "" : lockHTML("raw")) + "</div>";
   var setHTML = '<div class="bi-set">' + lockHTML("set") + "</div>";
   var skipHTML = '<div class="bi-skip">Click to skip</div>';
   var glassHTML = glass
@@ -205,16 +214,26 @@
     "#brandIntro.bi-hold .bi-lock,#brandIntro.bi-hold .bi-gfr,#brandIntro.bi-hold .bi-cutblade{visibility:hidden}",
     "#brandIntro .bi-raw,#brandIntro .bi-set{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}",
     "#brandIntro .bi-set{background:" + bg + "}",
-    "#brandIntro .bi-lock{position:relative;width:min(" + (pull === "cut" ? "62vw,500px" : "74vw,560px") + ");text-align:center}",
+    "#brandIntro .bi-lock{position:relative;width:min(" + (pull === "cut" ? "62vw,500px" : PARTS ? "80vw,620px" : "74vw,560px") + ");text-align:center}",
     // mark
     "#brandIntro .bi-markwrap{position:relative;width:100%;margin:0 auto}",
     "#brandIntro .bi-markwrap-word{line-height:0}",
     "#brandIntro .bi-mark-img{width:100%;height:auto;display:block}",
     "#brandIntro .bi-mark{position:absolute;inset:0;background-size:contain;background-position:center;background-repeat:no-repeat}",
     pull === "cut" ? "#brandIntro .bi-markwrap{aspect-ratio:600/296;width:88%}" : "",
-    // road (Autobahn)
-    "#brandIntro .bi-road{position:relative;width:86%;margin:0 auto 10px;aspect-ratio:1200/348}",
-    "#brandIntro .bi-lane{position:absolute;inset:0;width:100%;height:100%}",
+    // layered lockup (Autobahn)
+    "#brandIntro .bi-parts{width:100%}",
+    "#brandIntro .bi-pt{position:absolute;display:block}",
+    "#brandIntro .bi-strp img{position:absolute;top:0;height:100%;display:block;max-width:none}",
+    "#brandIntro .bi-sharp{left:0;width:100%}",
+    "#brandIntro .bi-strp,#brandIntro .bi-word{will-change:transform}",
+    "#brandIntro .bi-bloom{position:absolute;left:22%;right:0;top:-30%;height:105%;z-index:-1;opacity:0;pointer-events:none;" +
+    "background:radial-gradient(50% 50% at 55% 60%,rgba(255,30,20,.30),rgba(255,30,20,.10) 45%,transparent 72%)}",
+    // kicker (above the mark) — the brand site's own "NO LIMITS" lockup
+    "#brandIntro .bi-kick{margin-bottom:clamp(14px,2.2vw,24px);color:" + fg + ";font-family:" + font + ";white-space:nowrap;" +
+    "width:max-content;max-width:94vw;position:relative;left:50%;transform:translateX(-50%);" +
+    "font-size:clamp(10px,1.4vw,13px);font-weight:600;letter-spacing:clamp(.3em,1.4vw,.62em);text-indent:clamp(.3em,1.4vw,.62em)}",
+    "#brandIntro .bi-kick span{display:inline-block}",
     // rule + tagline
     "#brandIntro .bi-rule{height:3px;background:" + accent + ";margin:18px auto 0;width:100%;border-radius:2px;transform-origin:left center}",
     "#brandIntro .bi-sub{margin-top:16px;color:" + fg + ";font-family:" + font + ";white-space:nowrap;" +
@@ -224,7 +243,9 @@
     // glint
     "#brandIntro .bi-glint{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%;overflow:hidden;pointer-events:none}",
     "#brandIntro .bi-glint span{position:absolute;top:-10%;bottom:-10%;width:30%;" +
-    "background:linear-gradient(105deg,transparent," + (dark ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.95)") + " 50%,transparent);" +
+    "background:" + (PARTS
+      ? "linear-gradient(96deg,transparent 28%,rgba(255,40,24,.85) 44%,#fff 50%,rgba(255,40,24,.85) 56%,transparent 72%)"
+      : "linear-gradient(105deg,transparent," + (dark ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.95)") + " 50%,transparent)") + ";" +
     "transform:translateX(-170%) skewX(-12deg);opacity:0}",
     // skip
     "#brandIntro .bi-skip{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);z-index:5;" +
@@ -246,11 +267,12 @@
     R.push(
       "#brandIntro .bi-raw{background:" + bg + "}",
       "#brandIntro .bi-glare{position:absolute;inset:0;" +
-      "background:radial-gradient(38% 20% at 50% 44%,rgba(255,236,220,.55),rgba(255,90,60,.22) 45%,transparent 75%)," +
-      "linear-gradient(180deg,transparent 41%,rgba(255,110,80,.28) 44.5%,rgba(255,240,230,.65) 45%,rgba(255,110,80,.28) 45.5%,transparent 49%)}",
-      "#brandIntro .bi-raw .bi-road{visibility:hidden}",
-      "#brandIntro .bi-raw .bi-mark-img{filter:brightness(2.4) saturate(0) blur(1.6px);opacity:.45}",
-      "#brandIntro .bi-raw .bi-rule,#brandIntro .bi-raw .bi-sub{visibility:hidden}",
+      "background:radial-gradient(42% 16% at 50% 50%,rgba(255,70,50,.20),transparent 75%)," +
+      "linear-gradient(180deg,transparent 46%,rgba(255,60,40,.16) 49.6%,rgba(255,226,214,.42) 50%,rgba(255,60,40,.16) 50.4%,transparent 54%)}",
+      // taillights among the headlights
+      "#brandIntro .bi-streak1,#brandIntro .bi-streak4{background:linear-gradient(90deg,transparent,rgba(255,40,24,.9),transparent)}",
+      "#brandIntro .bi-sub{opacity:.7;font-size:clamp(9px,1.2vw,12px)}",
+
       "#brandIntro .bi-streak{position:absolute;left:0;height:1px;width:38%;border-radius:1px;opacity:0;" +
       "background:linear-gradient(90deg,transparent,rgba(255,226,214,.85),transparent)}",
       "#brandIntro .bi-streak0{top:30%}#brandIntro .bi-streak1{top:37%;width:24%}#brandIntro .bi-streak2{top:44.6%;height:2px;width:52%}" +
@@ -297,7 +319,11 @@
       vert
         ? "#brandIntro .bi-bin .bi-bar{right:0;transform:translateX(50%)}#brandIntro .bi-bout .bi-bar{left:0;transform:translateX(-50%)}"
         : "#brandIntro .bi-bin .bi-bar{bottom:0;transform:translateY(50%)}#brandIntro .bi-bout .bi-bar{top:0;transform:translateY(-50%)}",
-      "#brandIntro .bi-bout{opacity:0}#brandIntro.bi-exit .bi-bout{opacity:1}"
+      "#brandIntro .bi-bout{opacity:0}#brandIntro.bi-exit .bi-bout{opacity:1}",
+      vert && dark
+        ? "#brandIntro .bi-bin .bi-bar::before{content:'';position:absolute;top:0;bottom:0;right:100%;width:18vw;" +
+          "background:linear-gradient(90deg,transparent,rgba(255,36,20,.10) 55%,rgba(255,60,40,.38))}"
+        : ""
     );
   }
 
@@ -324,8 +350,6 @@
       "background:" + (glass.sheenBg ||
         "radial-gradient(120% 52% at 22% -6%,rgba(255,255,255," + glass.spec + ") 0%,rgba(255,255,255,0) 58%)," +
         "linear-gradient(100deg,transparent 0%," + glass.sheen + " 5%,transparent 16%,transparent 82%,rgba(255,255,255,.14) 94%,transparent 100%)") + "}",
-      // the lanes are part of the mark here — drawn from the start
-      "#brandIntro .bi-spine{stroke-dashoffset:0}"
     );
   }
 
@@ -372,17 +396,31 @@
         "#brandIntro .bi-bin{animation:biRWf " + pd + " " + ease + " " + p + " both}",
         "@keyframes biRWf{from{transform:translateX(-100%)}to{transform:translateX(0)}}",
         "@keyframes biRIf{from{transform:translateX(100%)}to{transform:translateX(0)}}",
+        // the line (and its afterglow) burns off once it has crossed
+        "#brandIntro .bi-bin .bi-bar{animation:biBurnOff .3s linear " + (T.pull + T.pullDur - 0.1) + "s both}",
+        "@keyframes biBurnOff{from{opacity:1}to{opacity:0}}",
         // headlight streaks race past in the raw night before the pull
         "#brandIntro .bi-streak{animation:biStreak .42s cubic-bezier(.5,0,.5,1) infinite}",
         "#brandIntro .bi-streak1{animation-delay:.12s}#brandIntro .bi-streak2{animation-delay:.05s;animation-duration:.36s}" +
         "#brandIntro .bi-streak3{animation-delay:.2s}#brandIntro .bi-streak4{animation-delay:.28s}#brandIntro .bi-streak5{animation-delay:.16s}",
         "@keyframes biStreak{0%{opacity:0;transform:translateX(-110%)}20%{opacity:1}80%{opacity:1}100%{opacity:0;transform:translateX(280%)}}",
-        // the lanes draw in the wake of the pull
-        "#brandIntro .bi-set .bi-spine{animation:biDraw .62s cubic-bezier(.3,.9,.25,1) forwards}",
-        "#brandIntro .bi-set .bi-spine0{animation-delay:" + (T.pull + 0.18) + "s}" +
-        "#brandIntro .bi-set .bi-spine1{animation-delay:" + (T.pull + 0.31) + "s}" +
-        "#brandIntro .bi-set .bi-spine2{animation-delay:" + (T.pull + 0.44) + "s}",
-        "@keyframes biDraw{to{stroke-dashoffset:0}}"
+        // the stripes drive in behind the line: smeared at speed, sharpening as
+        // they brake into place, staggered like lanes of traffic
+        "#brandIntro .bi-strp{animation:biDrive .82s cubic-bezier(.16,1,.3,1) both}",
+        "#brandIntro .bi-strp0{animation-delay:" + (T.pull - 0.04) + "s}" +
+        "#brandIntro .bi-strp1{animation-delay:" + (T.pull + 0.03) + "s}" +
+        "#brandIntro .bi-strp2{animation-delay:" + (T.pull + 0.10) + "s}",
+        "#brandIntro .bi-strp .bi-smear{animation:biSmear .82s linear both;animation-delay:inherit}",
+        "#brandIntro .bi-strp .bi-sharp{animation:biSharp .82s linear both;animation-delay:inherit}",
+        "@keyframes biDrive{from{transform:translateX(-95%)}to{transform:none}}",
+        "@keyframes biSmear{0%{opacity:1}30%{opacity:.9}62%{opacity:0}100%{opacity:0}}",
+        "@keyframes biSharp{0%{opacity:0}26%{opacity:0}58%{opacity:1}100%{opacity:1}}",
+        // the wordmark carries a little of the same momentum
+        "#brandIntro .bi-word{animation:biWordIn .9s cubic-bezier(.16,1,.3,1) " + T.pull + "s both}",
+        "@keyframes biWordIn{from{transform:translateX(-4%)}to{transform:none}}",
+        // brake-light bloom as the stripes lock
+        "#brandIntro .bi-bloom{animation:biBloom 1.1s ease-out " + (T.pull + 0.5) + "s both}",
+        "@keyframes biBloom{0%{opacity:0}30%{opacity:1}100%{opacity:.35}}"
       );
     } else {
       // cut: blade draws across at the strike line, the mark opens out of it,
@@ -405,6 +443,8 @@
     R.push(
       "#brandIntro .bi-set .bi-sub span{opacity:0;animation:biChar .55s " + out + " both;" +
       "animation-delay:calc(" + T.sub + "s + var(--i) * 18ms)}",
+      "#brandIntro .bi-set .bi-kick span{opacity:0;animation:biChar .55s " + out + " both;" +
+      "animation-delay:calc(" + (T.sub - 0.14) + "s + var(--i) * 22ms)}",
       "@keyframes biChar{from{opacity:0;transform:translateY(.5em);filter:blur(5px)}to{opacity:.85;transform:none;filter:blur(0)}}",
       "#brandIntro .bi-glint span{animation:biGlint .75s cubic-bezier(.45,0,.25,1) " + T.glint + "s both}",
       // invisible at BOTH ends: fill-mode "both" holds the first keyframe through
@@ -439,7 +479,8 @@
     R.push(
       "#brandIntro .bi-raw,#brandIntro .bi-bfr,#brandIntro .bi-cutblade,#brandIntro .bi-gfr{display:none}",
       "#brandIntro .bi-glint,#brandIntro .bi-skip{display:none}",
-      "#brandIntro .bi-sub span{opacity:.85}",
+      "#brandIntro .bi-sub span,#brandIntro .bi-kick span{opacity:.85}",
+      "#brandIntro .bi-smear{display:none}",
       "#brandIntro{transition:opacity .35s ease}#brandIntro.bi-exit{opacity:0}"
     );
   }
@@ -454,8 +495,8 @@
       var set = el.querySelector(".bi-set");
       var lock = set && set.querySelector(".bi-lock");
       if (!lock) return;
-      var mw = lock.querySelector(".bi-markwrap"), rd = lock.querySelector(".bi-road");
-      var top = lock.offsetTop + (rd ? rd.offsetTop : mw.offsetTop);
+      var mw = lock.querySelector(".bi-markwrap");
+      var top = lock.offsetTop + mw.offsetTop;
       var bot = lock.offsetTop + mw.offsetTop + mw.offsetHeight;
       var fw = vw * 1.24, fh = vh * 1.24;
       var my = (top + bot) / 2;                                   // mark centre (viewport y)
@@ -536,6 +577,21 @@
     Promise.all(jobs).then(res);
     whenVisible(function () { setTimeout(res, READY_CAP); });
   });
+
+  // tracked-out taglines must never run off a phone: tighten the tracking
+  // just enough to fit (measured with the real face, once it's loaded)
+  var fitText = function () {
+    el.querySelectorAll(".bi-sub,.bi-kick").forEach(function (t) {
+      t.style.letterSpacing = t.style.textIndent = "";
+      var max = window.innerWidth * 0.92, w = t.scrollWidth;
+      if (w <= max) return;
+      var ls = parseFloat(getComputedStyle(t).letterSpacing) || 0;
+      var fit = Math.max(1, ls - (w - max) / Math.max(1, t.children.length)).toFixed(2) + "px";
+      t.style.letterSpacing = t.style.textIndent = fit;
+    });
+  };
+  ready.then(fitText);
+  window.addEventListener("resize", fitText);
 
   // ---------------------------------------------------------------- lifecycle
   var done = false;
