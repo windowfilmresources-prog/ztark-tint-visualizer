@@ -24,28 +24,28 @@ const ENVIRONMENTS = [
   {
     // soft clean white — a lighter gray, NOT a blown-out harsh white
     id: "white", name: "White Studio", swatch: "#ffffff", hdri: "studio_small_09.hdr",
-    bg: { grad: ["#f3f5f6", "#e3e7ea"] }, exposure: 0.9, studio: { hdri: 0.8, top: 3.2, side: 2.4, rim: 1.8 },
+    bg: { grad: ["#f3f5f6", "#e3e7ea"] }, exposure: 0.9, studio: { dome: [[0.95, 0.96, 0.97], [0.78, 0.79, 0.8], [0.45, 0.46, 0.47]], top: 3.2, side: 2.4, rim: 1.8 },
     floor: { color: 0xeef0f2, roughness: 0.6, metalness: 0.0, env: 0.45 },
     rig: { key: [0xfff6ee, 1.12], fill: [0xe4ecf5, 0.45], rim: [0xffffff, 0.42] },
     fog: [0xe6e9ec, 11, 30], envInt: 0.85,
   },
   {
     id: "gray", name: "Neutral Gray", swatch: "#a8acb0", hdri: "photo_studio_01.hdr",
-    bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 0.92, studio: { hdri: 0.55, top: 3.6, side: 2.8, rim: 2.2 },
+    bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 0.92, studio: { dome: [[0.5, 0.51, 0.52], [0.36, 0.365, 0.37], [0.18, 0.18, 0.185]], top: 3.6, side: 2.8, rim: 2.2 },
     floor: { color: 0xa6aaae, roughness: 0.5, metalness: 0.0, env: 0.65 },
     rig: { key: [0xfff4ea, 1.25], fill: [0xe2e8f0, 0.4], rim: [0xffffff, 0.55] },
     fog: [0xaeb2b6, 12, 32], envInt: 0.9,
   },
   {
     id: "graphite", name: "Graphite", swatch: "#26282c", hdri: "studio_small_03.hdr",
-    bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.05, studio: { hdri: 0.3, top: 4.2, side: 3.4, rim: 3.0 },
+    bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.05, studio: { dome: [[0.09, 0.095, 0.1], [0.05, 0.052, 0.056], [0.02, 0.02, 0.022]], top: 4.2, side: 3.4, rim: 3.0 },
     floor: { color: 0x1b1d20, roughness: 0.55, metalness: 0.0, env: 0.42 },
     rig: { key: [0xfff6ee, 1.55], fill: [0x9fb2cc, 0.28], rim: [0xffffff, 0.85] },
     fog: [0x191b1e, 12, 34], envInt: 1.0,
   },
   {
     id: "showroom", name: "Warm Showroom", swatch: "#6f5a43", hdri: "brown_photostudio_02.hdr",
-    bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.0, studio: { hdri: 0.45, top: 3.8, side: 3.0, rim: 2.4 },
+    bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.0, studio: { dome: [[0.2, 0.16, 0.12], [0.11, 0.088, 0.068], [0.04, 0.032, 0.026]], top: 3.8, side: 3.0, rim: 2.4 },
     floor: { color: 0x241f1b, roughness: 0.55, metalness: 0.0, env: 0.48 },
     rig: { key: [0xffe9cf, 1.42], fill: [0xf0e0cc, 0.34], rim: [0xfff2e0, 0.62] },
     fog: [0x241f1b, 12, 34], envInt: 1.0,
@@ -86,6 +86,7 @@ const DEFAULT_FLEET = [
     id: "sports",
     label: "Sports",
     urls: ["assets/models/corvette/car.glb?v=2"],
+    mats: { Rim_Alloy: "alloy" },
     credit: "Vehicle 3D model © Martin Trafas · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a",
   },
@@ -100,6 +101,9 @@ const DEFAULT_FLEET = [
     id: "suv",
     label: "SUV",
     urls: ["assets/models/suv/suv.glb?v=6"],
+    // X5 M Competition: Shadow Line window frames, B-pillars and grilles are
+    // high-gloss black (the model shipped them flat gray)
+    mats: { Color_M08: "pianoBlack", Grille1: "pianoBlack", Grille2: "pianoBlack", jean_blue: "pianoBlack" },
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
   },
@@ -742,6 +746,7 @@ function prepareCar(root, cfg) {
     });
   }
 
+  applyFinishes(root, cfg, bodyMats);
   normalizeCar(root);
   return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow };
 }
@@ -934,6 +939,55 @@ function adoptPaint(root, src) {
   return m;
 }
 
+// Finishes the models get wrong. Untextured tyres are near-black satin
+// rubber (mid-gray reads as plastic), chrome is a true mirror, painted alloy
+// wheels carry a clear coat, Shadow Line trim is piano black. Textured parts
+// (e.g. the X5's rims/tyres) are left alone — their maps already read right.
+const FINISH = {
+  tire: { color: 0x141416, metalness: 0, roughness: 0.8, envMapIntensity: 0.7 },
+  chrome: { color: 0xeef0f3, metalness: 1, roughness: 0.04, envMapIntensity: 1 },
+  alloy: { physical: true, color: 0xcfd2d7, metalness: 1, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04 },
+  pianoBlack: { physical: true, color: 0x0a0b0c, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 },
+};
+function applyFinish(root, src, key) {
+  const f = FINISH[key];
+  if (!f) return;
+  let m = src;
+  if (f.physical && !src.isMeshPhysicalMaterial) {
+    m = new THREE.MeshPhysicalMaterial();
+    m.name = src.name;
+    if (src.normalMap) { m.normalMap = src.normalMap; m.normalScale.copy(src.normalScale); }
+    if (src.aoMap) m.aoMap = src.aoMap;
+    m.side = src.side;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      if (Array.isArray(o.material)) o.material = o.material.map((x) => (x === src ? m : x));
+      else if (o.material === src) o.material = m;
+    });
+  }
+  m.map = null;
+  m.metalnessMap = null;
+  m.roughnessMap = null;
+  for (const k of ["metalness", "roughness", "envMapIntensity", "clearcoat", "clearcoatRoughness"]) if (k in f) m[k] = f[k];
+  m.color.setHex(f.color);
+  m.needsUpdate = true;
+}
+function applyFinishes(root, cfg, bodyMats) {
+  const seen = new Set();
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m && !bodyMats.includes(m)) seen.add(m); });
+  });
+  const explicit = (cfg && cfg.mats) || {};
+  seen.forEach((m) => {
+    const nm = m.name || "";
+    let key = explicit[nm];
+    if (!key && !m.map && /tire|tyre/i.test(nm)) key = "tire";
+    else if (!key && !m.map && /chrome/i.test(nm) && m.metalness > 0.8) key = "chrome";
+    if (key) applyFinish(root, m, key);
+  });
+}
+
 // Grounding: a contact shadow baked from the car's own shape (depth from
 // below the floor, blurred) — dark where the tyres meet the ground, fading
 // up the sills. Baked once per car load; nothing it depends on moves.
@@ -1026,21 +1080,31 @@ function makeCyc(mat) {
 }
 
 // Studio reflections: car photography lives on long softbox / strip-light
-// highlights running down the body. The studio HDRIs alone barely show any,
-// so each set's reflection map = its HDRI (dimmed) + real light panels — a big
-// overhead softbox, side strips, a rear rim — prefiltered once and cached.
+// highlights running down the body, over a clean neutral studio. (The studio
+// HDRIs were photos of real rooms — their brown walls and gear reflected in
+// the clear coat as smudges.) So each set's reflection map = a neutral
+// gradient dome in the set's tones + real light panels — a big overhead
+// softbox, side strips, a rear rim — prefiltered once and cached.
 const _studioEnv = {};
-function studioEnvMap(e, equirect) {
+function studioEnvMap(e) {
   if (_studioEnv[e.id]) return _studioEnv[e.id];
   const st = e.studio;
   const sc = new THREE.Scene();
-  const tex = equirect.clone();
-  tex.mapping = THREE.UVMapping;
-  tex.needsUpdate = true;
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 32),
-    new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide }));
-  dome.material.color.setScalar(st.hdri);
-  sc.add(dome);
+  const geo = new THREE.SphereGeometry(30, 48, 32);
+  const pos = geo.getAttribute("position"), cols = [];
+  const top = new THREE.Color().fromArray(st.dome[0]), mid = new THREE.Color().fromArray(st.dome[1]), low = new THREE.Color().fromArray(st.dome[2]);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 30; // -1 floor .. 1 zenith
+    if (y >= 0) c.copy(mid).lerp(top, Math.pow(y, 0.7)); else c.copy(mid).lerp(low, Math.min(1, -y * 2.2));
+    // black flag band just under the horizon: chrome needs something dark to
+    // reflect (else it greys out), and paint gets the crisp studio horizon line
+    const flag = THREE.MathUtils.smoothstep(y, -0.2, -0.09) * (1 - THREE.MathUtils.smoothstep(y, -0.01, 0.05));
+    c.multiplyScalar(1 - 0.8 * flag);
+    cols.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
+  sc.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
   const panel = (w, h, pos, k) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k * 0.99, k * 0.97), side: THREE.DoubleSide }));
@@ -1054,7 +1118,7 @@ function studioEnvMap(e, equirect) {
   panel(8, 1.1, [0, 3.0, -10], st.rim);          // rear rim strip
   panel(7, 1.0, [1.5, 3.4, 10], st.rim * 0.7);   // front kicker
   const rt = state.pmrem.fromScene(sc, 0.02);
-  tex.dispose();
+  geo.dispose();
   _studioEnv[e.id] = rt.texture;
   return rt.texture;
 }
@@ -1664,10 +1728,17 @@ function applyEnvironment(id) {
   setL(state.keyLight, e.rig.key);
   setL(state.fillLight, e.rig.fill);
   setL(state.rimLight, e.rig.rim);
-  // HDRI env map (async) — reflections + image-based light; sky bg if asked
+  // studio sets: the neutral softbox studio (synchronous, cached); outdoor:
+  // the real HDRI env map (async) — reflections + image-based light
+  if (e.studio) {
+    sc.environment = studioEnvMap(e);
+    state.envBackground = sc.background;
+    if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
+    return;
+  }
   loadHDRI(e.hdri, (env) => {
     if (state.envId !== e.id) return; // switched again mid-load
-    sc.environment = e.studio ? studioEnvMap(e, env.equirect) : env.pmrem;
+    sc.environment = env.pmrem;
     if (e.bg.hdri) sc.background = env.equirect;
     state.envBackground = sc.background;
     if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
@@ -1686,6 +1757,7 @@ function preloadEnvironments() {
   const next = () => {
     if (i >= ENVIRONMENTS.length) return;
     const e = ENVIRONMENTS[i++];
+    if (e.studio) { studioEnvMap(e); setTimeout(next, 120); return; } // no HDRI needed
     loadHDRI(e.hdri, () => setTimeout(next, 120)); // stagger so we don't hitch
   };
   next();
@@ -1905,6 +1977,64 @@ window.VIEWER3D = {
   debugGlass() {
     const g = (z) => state.zoneMats && state.zoneMats[z] ? state.zoneMats[z].color.getHexString() : null;
     return Object.fromEntries(ZONES.map((z) => [z, g(z)]));
+  },
+  // QA: flood one material (by material name, or by a mesh that uses it) in a
+  // loud colour to see which parts of the model it paints
+  debugHL(which, hex = "#ff00ff") {
+    if (!state.carRoot) return 0;
+    let n = 0;
+    state.carRoot.traverse((o) => {
+      if (!o.isMesh) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach((m) => {
+        if (!m || !(m.name === which || o.name === which)) return;
+        if (m.color) m.color.set(hex);
+        if (m.emissive) { m.emissive.set(hex); m.emissiveIntensity = 0.6; }
+        m.map = null; m.needsUpdate = true; n++;
+      });
+    });
+    return n;
+  },
+  // QA: meshes with world centre + size (find parts by where they sit)
+  debugMeshes() {
+    const out = [];
+    if (!state.carRoot) return out;
+    state.carRoot.updateMatrixWorld(true);
+    state.carRoot.traverse((o) => {
+      if (!o.isMesh) return;
+      const b = new THREE.Box3().setFromObject(o), c = b.getCenter(new THREE.Vector3()), z = b.getSize(new THREE.Vector3());
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      out.push({ mesh: o.name, mat: m && m.name, map: !!(m && m.map), metal: m && m.metalness, rough: m && m.roughness,
+        c: [c.x, c.y, c.z].map((v) => +v.toFixed(2)), s: [z.x, z.y, z.z].map((v) => +v.toFixed(2)) });
+    });
+    return out;
+  },
+  // QA: every car material with its look-defining properties + where it sits
+  debugMatInfo() {
+    const out = new Map();
+    if (!state.carRoot) return [];
+    state.carRoot.updateMatrixWorld(true);
+    state.carRoot.traverse((o) => {
+      if (!o.isMesh) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+      ms.forEach((m) => {
+        if (!m) return;
+        let r = out.get(m);
+        if (!r) {
+          r = { name: m.name, type: m.type, color: m.color ? "#" + m.color.getHexString() : null,
+            metal: m.metalness, rough: m.roughness, env: m.envMapIntensity, cc: m.clearcoat,
+            map: !!m.map, normal: !!m.normalMap, mr: !!m.metalnessMap || !!m.roughnessMap, ao: !!m.aoMap,
+            emissive: m.emissive ? "#" + m.emissive.getHexString() : null, opacity: m.opacity, transparent: m.transparent,
+            meshes: 0, ys: [], names: [] };
+          out.set(m, r);
+        }
+        r.meshes++;
+        if (r.ys.length < 4) r.ys.push(+c.y.toFixed(2));
+        if (r.names.length < 3) r.names.push(o.name);
+      });
+    });
+    return [...out.values()];
   },
   debugMats() {
     const out = [];
