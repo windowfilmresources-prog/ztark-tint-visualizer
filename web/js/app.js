@@ -705,6 +705,11 @@
     }
     const vlt = activeShadeVlt();
     sh = series().shades.find((s) => s.vlt === vlt) || series().shades[0];
+    // a shade can carry its own technology line (e.g. the light nano-ceramic
+    // shades inside a series whose darker shades are built differently)
+    const tech = sh.tech || series().tech || "";
+    $("seriesTech").textContent = tech;
+    $("seriesTech").style.display = tech ? "inline-block" : "none";
     const cells = [
       [sh.vlt + "%", "VLT"],
       [sh.tser != null ? sh.tser + "%" : "—", "TSER"],

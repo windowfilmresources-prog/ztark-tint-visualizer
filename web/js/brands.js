@@ -144,6 +144,10 @@ window.BRANDS = {
           { sku: 40, vlt: 40, tser: 53, ir: 60, uv: 99 },
           { sku: 50, vlt: 47, tser: 50, ir: 60, uv: 99 },
           { sku: 56, vlt: 54, tser: 49, ir: 60, uv: 99 },
+          // 70 / 80: the light shades, per Autobahn's Air Ceramic specification
+          // card (nano-ceramic; IR rejection differs from the darker shades)
+          { sku: 70, vlt: 70, tser: 50, ir: 89, uv: 99, tech: "Nano-Ceramic · 89% IRR" },
+          { sku: 80, vlt: 78, tser: 44, ir: 68, uv: 99, tech: "Nano-Ceramic · 68% IRR" },
         ] },
       { name: "Autobahn Black", tech: "Deep-Dye Film",
         tagline: "Affordable performance — the benefits of window film without breaking the bank.",
