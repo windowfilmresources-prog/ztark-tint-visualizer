@@ -16,3 +16,6 @@ Modifications by ZTARK (windowfilmresources-prog, 2026-07):
 - Materials adjusted (body paint -> Body_Paint metallic blue, rims, lamps,
   interior); invisible line-primitive meshes dropped at export. Geometry
   Draco-compressed, textures resized/WebP.
+- 2026-10: tailgate (hatch) window glass added — the source model has an open
+  hole there. Pane fitted to the opening's rim by ray-probing and given the
+  model's own Windows material (modeling/debadged/suv/hatchglass/).

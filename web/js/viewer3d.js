@@ -100,7 +100,7 @@ const DEFAULT_FLEET = [
   {
     id: "suv",
     label: "SUV",
-    urls: ["assets/models/suv/suv.glb?v=6"],
+    urls: ["assets/models/suv/suv.glb?v=7"],
     // X5 M Competition: Shadow Line window frames, B-pillars and grilles are
     // high-gloss black (the model shipped them flat gray)
     mats: { Color_M08: "pianoBlack", Grille1: "pianoBlack", Grille2: "pianoBlack", jean_blue: "pianoBlack" },
@@ -149,10 +149,20 @@ function glassMat(name) {
 }
 
 // ---------------------------------------------------------------- glass splitting
-// Zone assignment must be computed over ALL glass meshes together: a mesh holding
-// only the back window would otherwise treat its own steep glass as "the windshield".
-// analyzeGlass() scans every glass mesh once and returns the shared frame of
-// reference; splitGlass() then classifies one mesh's triangles against it.
+// Single-glass-material models get their panes sorted into the four tint zones
+// by geometry. The unit of decision is the PANE (a connected piece of glass),
+// never the triangle — per-triangle sorting cut sunroofs in half and left
+// zigzag "spikes" where long triangles straddled the cut. A pane is judged by
+// which way it faces, not how much it tilts (an SUV hatch or a pickup's cab
+// glass is nearly upright, a fastback's rear glass nearly flat):
+//   side glass   faces sideways                → front / rear side windows
+//   end glass    faces along the car           → windshield / back window
+//   sunroof      flat glass with a windshield ahead of it AND a back window
+//                behind it → its own fixed factory roof glass (no tint zone)
+//   lamp lenses  glass sitting below the window line → clear, never tinted
+// analyzeGlass() labels every triangle with its pane's zone over ALL glass
+// meshes together (one shared frame); splitGlass() then just buckets a mesh.
+const EXTRA_GLASS = ["roof", "lamp"];
 
 function meshTris(mesh) {
   mesh.updateWorldMatrix(true, false);
@@ -162,18 +172,16 @@ function meshTris(mesh) {
   const pos = geo.getAttribute("position");
   const norm = geo.getAttribute("normal");
   const uv = geo.getAttribute("uv");
-  const v = new THREE.Vector3(), n = new THREE.Vector3();
+  const n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
   const tris = [];
   for (let i = 0; i < pos.count; i += 3) {
-    let ny = 0;
-    const cen = new THREE.Vector3();
-    for (let j = i; j < i + 3; j++) {
-      n.set(norm.getX(j), norm.getY(j), norm.getZ(j)).applyMatrix3(nMat).normalize();
-      ny += n.y;
-      v.set(pos.getX(j), pos.getY(j), pos.getZ(j)).applyMatrix4(mw);
-      cen.add(v);
-    }
-    tris.push({ i, ny: Math.abs(ny / 3), cen: cen.multiplyScalar(1 / 3) });
+    const v = [0, 1, 2].map((k) => new THREE.Vector3(pos.getX(i + k), pos.getY(i + k), pos.getZ(i + k)).applyMatrix4(mw));
+    const an = new THREE.Vector3();
+    for (let j = i; j < i + 3; j++) an.add(n.set(norm.getX(j), norm.getY(j), norm.getZ(j)).applyMatrix3(nMat).normalize());
+    an.multiplyScalar(1 / 3);
+    const area = e1.subVectors(v[1], v[0]).cross(e2.subVectors(v[2], v[0])).length() / 2;
+    const cen = v[0].clone().add(v[1]).add(v[2]).multiplyScalar(1 / 3);
+    tris.push({ i, v, cen, area, n: an, ny: Math.abs(an.y), zone: null });
   }
   return { tris, pos, norm, uv };
 }
@@ -190,30 +198,88 @@ function analyzeGlass(meshes) {
   const size = bb.getSize(new THREE.Vector3());
   const center = bb.getCenter(new THREE.Vector3());
   const axis = size.x > size.z ? "x" : "z";
-  const steep = all.filter((t) => t.ny >= 0.6);
-  // the windshield is the LARGER steep cluster; find both clusters and pick front by area
-  const fwd = steep.filter((t) => t.cen[axis] >= center[axis]);
-  const bwd = steep.filter((t) => t.cen[axis] < center[axis]);
-  const frontSign = fwd.length >= bwd.length ? 1 : -1;
-  const wsCluster = frontSign > 0 ? fwd : bwd;
-  let wsRearEdge = center[axis];
-  wsCluster.forEach((t) => {
-    if ((t.cen[axis] - wsRearEdge) * -frontSign > 0) wsRearEdge = t.cen[axis];
+  const lat = axis === "x" ? "z" : "x";
+  const len = size[axis] || 1;
+  // front: the end of the car whose steep glass (windshield) outweighs the other's
+  let fwd = 0, bwd = 0;
+  all.forEach((t) => { if (t.ny >= 0.6 && t.ny < 0.97) { if (t.cen[axis] >= center[axis]) fwd += t.area; else bwd += t.area; } });
+  const frontSign = fwd >= bwd ? 1 : -1;
+  const U = (p) => (p[axis] - center[axis]) * frontSign; // + = toward the nose
+
+  // panes = connected components (triangles sharing a vertex position)
+  const q = Math.max(size.x, size.y, size.z) * 2e-5 || 1e-6;
+  const parent = all.map((_, k) => k);
+  const find = (k) => { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
+  const seen = new Map();
+  all.forEach((t, k) => {
+    t.v.forEach((p) => {
+      const key = Math.round(p.x / q) + "," + Math.round(p.y / q) + "," + Math.round(p.z / q);
+      const o = seen.get(key);
+      if (o === undefined) seen.set(key, k); else parent[find(k)] = find(o);
+    });
   });
-  const boundary = wsRearEdge + -frontSign * size[axis] * 0.06;
-  return { axis, center, frontSign, boundary, perMesh };
+  const panes = new Map();
+  let total = 0;
+  all.forEach((t, k) => {
+    const r = find(k);
+    let c = panes.get(r);
+    if (!c) panes.set(r, c = { tris: [], area: 0, ny: 0, nl: 0, ng: 0, u: 0, y: 0, x: 0, uMin: Infinity, uMax: -Infinity, yMin: Infinity });
+    c.tris.push(t);
+    const a = t.area;
+    c.area += a; total += a;
+    c.ny += t.ny * a; c.nl += Math.abs(t.n[lat]) * a; c.ng += Math.abs(t.n[axis]) * a;
+    c.u += U(t.cen) * a; c.y += t.cen.y * a; c.x += (t.cen[lat] - center[lat]) * a;
+    t.v.forEach((p) => { const u = U(p); if (u < c.uMin) c.uMin = u; if (u > c.uMax) c.uMax = u; if (p.y < c.yMin) c.yMin = p.y; });
+  });
+  const list = [...panes.values()].filter((c) => c.area > 0);
+  list.forEach((c) => { for (const k of ["ny", "nl", "ng", "u", "y", "x"]) c[k] /= c.area; });
+
+  // the window line: the lowest edge of any real window (a "real" pane is one
+  // carrying a few percent of all the glass); glass centred below it is a lamp lens
+  const big = list.filter((c) => c.area >= total * 0.04);
+  const belt = big.length ? Math.min(...big.map((c) => c.yMin)) : -Infinity;
+
+  const windows = [];
+  list.forEach((c) => {
+    if (c.y < belt) { c.zone = "lamp"; return; }
+    c.side = c.nl >= 0.55; // faces sideways
+    windows.push(c);
+  });
+  const ends = windows.filter((c) => !c.side);
+  const gap = len * 0.08, real = total * 0.02;
+  ends.forEach((c) => {
+    const flat = c.ny >= 0.93;
+    const ahead = ends.some((o) => o !== c && o.area >= real && o.u > c.u + gap);
+    const behind = ends.some((o) => o !== c && o.area >= real && o.u < c.u - gap);
+    c.zone = flat && ahead && behind ? "roof" : null;
+  });
+  // windshield / back window: the remaining end glass, by which end it sits at
+  // (split at the midpoint between the foremost and rearmost of them)
+  const endGlass = ends.filter((c) => !c.zone);
+  if (endGlass.length) {
+    const us = endGlass.filter((c) => c.area >= real).map((c) => c.u);
+    const mid = us.length ? (Math.max(...us) + Math.min(...us)) / 2 : 0;
+    const one = us.length && Math.max(...us) - Math.min(...us) < gap; // only one end pane found
+    endGlass.forEach((c) => { c.zone = (one ? c.u >= 0 : c.u >= mid) ? "windshield" : "back"; });
+  }
+  // side glass, per side of the car: the foremost real pane is the front door
+  // glass (plus anything level with or ahead of it); everything behind is rear
+  [1, -1].forEach((sgn) => {
+    const sides = windows.filter((c) => c.side && (c.x >= 0 ? 1 : -1) === sgn);
+    if (!sides.length) return;
+    const top = Math.max(...sides.map((c) => c.area));
+    const lead = sides.filter((c) => c.area >= top * 0.25).sort((a, b) => b.u - a.u)[0];
+    const cut = lead.uMin + (lead.uMax - lead.uMin) * 0.12;
+    sides.forEach((c) => { c.zone = c.u >= cut ? "front" : "rear"; });
+  });
+  list.forEach((c) => c.tris.forEach((t) => { t.zone = c.zone || "rear"; }));
+  return { perMesh };
 }
 
 function splitGlass(mesh, frame) {
-  const { axis, center, frontSign, boundary } = frame;
   const { tris, pos, norm, uv } = frame.perMesh.get(mesh);
-  const buckets = { windshield: [], front: [], rear: [], back: [] };
-  tris.forEach((t) => {
-    const onFrontHalf = Math.sign(t.cen[axis] - center[axis]) === frontSign || t.cen[axis] === center[axis];
-    const forwardOfBoundary = (t.cen[axis] - boundary) * frontSign > 0;
-    if (t.ny >= 0.6) (onFrontHalf ? buckets.windshield : buckets.back).push(t.i);
-    else (forwardOfBoundary ? buckets.front : buckets.rear).push(t.i);
-  });
+  const buckets = Object.fromEntries([...ZONES, ...EXTRA_GLASS].map((z) => [z, []]));
+  tris.forEach((t) => buckets[t.zone].push(t.i));
   const build = (idxs) => {
     if (!idxs.length) return null;
     const p = [], nn = [], u = [];
@@ -230,7 +296,7 @@ function splitGlass(mesh, frame) {
     if (uv && u.length) g.setAttribute("uv", new THREE.Float32BufferAttribute(u, 2));
     return g;
   };
-  return Object.fromEntries(ZONES.map((z) => [z, build(buckets[z])]));
+  return Object.fromEntries(Object.keys(buckets).map((z) => [z, build(buckets[z])]));
 }
 
 // ---------------------------------------------------------------- building preparation
@@ -730,17 +796,20 @@ function prepareCar(root, cfg) {
   // No named zones: split generic glass meshes into the four zones by geometry,
   // classified against ONE shared frame computed over all glass together.
   if (glassMeshes.length) {
+    // a panoramic roof is dark factory privacy glass; lamp lenses stay clear
+    const extraGlass = { roof: glassMat("Glass_roof"), lamp: glassMat("Glass_lamp") };
+    extraGlass.roof.color.setRGB(0.2, 0.21, 0.22);
     const frame = analyzeGlass(glassMeshes);
     glassMeshes.forEach((glass) => {
       const parts = splitGlass(glass, frame);
       const parent = glass.parent;
-      ZONES.forEach((z) => {
+      [...ZONES, ...EXTRA_GLASS].forEach((z) => {
         const g = parts[z];
         if (!g) return;
-        const mesh = new THREE.Mesh(g, zoneMats[z]);
+        const mesh = new THREE.Mesh(g, zoneMats[z] || extraGlass[z]);
         mesh.position.copy(glass.position); mesh.rotation.copy(glass.rotation); mesh.scale.copy(glass.scale);
         parent.add(mesh);
-        zoneMeshes[z].push(mesh);
+        if (zoneMeshes[z]) zoneMeshes[z].push(mesh); // roof / lamp glass isn't a tint zone
       });
       parent.remove(glass);
     });
@@ -1994,6 +2063,39 @@ window.VIEWER3D = {
       });
     });
     return n;
+  },
+  // QA: per glass zone, where its triangles sit (z bands), how they tilt, and
+  // whether their winding faces the way their normals say
+  debugGlassTris() {
+    const out = {};
+    if (!state.zoneMeshes) return out;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3(), fn = new THREE.Vector3();
+    ZONES.forEach((z) => {
+      const bands = {};
+      (state.zoneMeshes[z] || []).forEach((m) => {
+        m.updateWorldMatrix(true, false);
+        const pos = m.geometry.getAttribute("position"), nor = m.geometry.getAttribute("normal");
+        const nm = new THREE.Matrix3().getNormalMatrix(m.matrixWorld);
+        for (let i = 0; i < pos.count; i += 3) {
+          a.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+          b.fromBufferAttribute(pos, i + 1).applyMatrix4(m.matrixWorld);
+          c.fromBufferAttribute(pos, i + 2).applyMatrix4(m.matrixWorld);
+          n.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+          fn.copy(b).sub(a).cross(c.clone().sub(a));
+          const area = fn.length() / 2; fn.normalize();
+          const cz = (a.z + b.z + c.z) / 3, cy = (a.y + b.y + c.y) / 3, cx = (a.x + b.x + c.x) / 3;
+          const key = (Math.round(cz * 2) / 2).toFixed(1);
+          const r = bands[key] || (bands[key] = { n: 0, area: 0, ny: 0, y: 0, flipped: 0, inward: 0 });
+          r.n++; r.area += area; r.ny += Math.abs(n.y) * area; r.y += cy * area;
+          if (fn.dot(n) < 0) r.flipped++;
+          // does the geometric face normal point away from the cabin centre (0, 1, z)?
+          if (fn.x * cx + fn.y * (cy - 1.0) + fn.z * (cz < -1 ? -1 : cz > 1 ? 1 : 0) < 0) r.inward++;
+        }
+      });
+      Object.values(bands).forEach((r) => { r.ny = +(r.ny / r.area).toFixed(2); r.y = +(r.y / r.area).toFixed(2); r.area = +r.area.toFixed(2); });
+      out[z] = bands;
+    });
+    return out;
   },
   // QA: meshes with world centre + size (find parts by where they sit)
   debugMeshes() {
