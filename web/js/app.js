@@ -538,7 +538,7 @@
     if (PHOTO_MODE || !envs.length) { envGroup.style.display = "none"; }
     else {
       envGroup.style.display = "";
-      const cur = (window.VIEWER3D && window.VIEWER3D.environment) || S.env;
+      const cur = S.env || (window.VIEWER3D && window.VIEWER3D.environment); // the user's pick is the truth; the viewer swaps after a fade
       const refocusEnv = keepFocus($("envTabs"));
       $("envTabs").innerHTML = envs.map((e) =>
         `<button class="veh-btn env-btn ${e.id === cur ? "active" : ""}" aria-pressed="${e.id === cur}" data-e="${e.id}">` +

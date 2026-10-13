@@ -27,38 +27,43 @@ const ENVIRONMENTS = [
     bg: { grad: ["#f3f5f6", "#e3e7ea"] }, exposure: 0.9, studio: { dome: [[0.95, 0.96, 0.97], [0.78, 0.79, 0.8], [0.45, 0.46, 0.47]], top: 3.2, side: 2.4, rim: 1.8 },
     floor: { color: 0xeef0f2, roughness: 0.6, metalness: 0.0, env: 0.45 },
     rig: { key: [0xfff6ee, 1.12], fill: [0xe4ecf5, 0.45], rim: [0xffffff, 0.42] },
-    fog: [0xe6e9ec, 11, 30], envInt: 0.85,
+    fog: [0xe6e9ec, 11, 30], envInt: 0.85, cabin: 0.62,
   },
   {
     id: "gray", name: "Neutral Gray", swatch: "#a8acb0", hdri: "photo_studio_01.hdr",
     bg: { grad: ["#bcc0c4", "#94989d"] }, exposure: 0.92, studio: { dome: [[0.5, 0.51, 0.52], [0.36, 0.365, 0.37], [0.18, 0.18, 0.185]], top: 3.6, side: 2.8, rim: 2.2 },
     floor: { color: 0xa6aaae, roughness: 0.5, metalness: 0.0, env: 0.65 },
     rig: { key: [0xfff4ea, 1.25], fill: [0xe2e8f0, 0.4], rim: [0xffffff, 0.55] },
-    fog: [0xaeb2b6, 12, 32], envInt: 0.9,
+    fog: [0xaeb2b6, 12, 32], envInt: 0.9, cabin: 0.5,
   },
   {
     id: "graphite", name: "Graphite", swatch: "#26282c", hdri: "studio_small_03.hdr",
     bg: { grad: ["#2c2f33", "#151619"] }, exposure: 1.05, studio: { dome: [[0.09, 0.095, 0.1], [0.05, 0.052, 0.056], [0.02, 0.02, 0.022]], top: 4.2, side: 3.4, rim: 3.0 },
     floor: { color: 0x1b1d20, roughness: 0.55, metalness: 0.0, env: 0.42 },
     rig: { key: [0xfff6ee, 1.55], fill: [0x9fb2cc, 0.28], rim: [0xffffff, 0.85] },
-    fog: [0x191b1e, 12, 34], envInt: 1.0,
+    fog: [0x191b1e, 12, 34], envInt: 1.0, cabin: 0.22,
   },
   {
     id: "showroom", name: "Warm Showroom", swatch: "#6f5a43", hdri: "brown_photostudio_02.hdr",
     bg: { grad: ["#3b342e", "#211c19"] }, exposure: 1.0, studio: { dome: [[0.2, 0.16, 0.12], [0.11, 0.088, 0.068], [0.04, 0.032, 0.026]], top: 3.8, side: 3.0, rim: 2.4 },
     floor: { color: 0x241f1b, roughness: 0.55, metalness: 0.0, env: 0.48 },
     rig: { key: [0xffe9cf, 1.42], fill: [0xf0e0cc, 0.34], rim: [0xfff2e0, 0.62] },
-    fog: [0x241f1b, 12, 34], envInt: 1.0,
+    fog: [0x241f1b, 12, 34], envInt: 1.0, cabin: 0.26,
   },
   {
     // outdoor HDRI drives the reflections + light; a blended sky gradient is
     // the backdrop (the raw HDRI-as-background put a hard horizon seam across
     // the flat floor). Floor tone meets the gradient's lower stop, no seam.
+    // A real outdoor scene, not a studio with sky reflections: the HDRI's sky
+    // is the visible backdrop (softened — it's a 1k map), the car stands on an
+    // asphalt lot that dissolves into the landscape, and the key light is the
+    // HDRI's own sun (azimuth 216°, 48° up) throwing a firmer shadow.
     id: "sky", name: "Open Sky", swatch: "#8bb0d0", hdri: "kloofendal_48d_partly_cloudy.hdr",
-    bg: { grad: ["#7ba6cf", "#cfd9e2"] }, exposure: 0.9,
+    bg: { grad: ["#7ba6cf", "#cfd9e2"], hdri: true, blur: 0.045 }, exposure: 0.86, outdoor: true,
     floor: { color: 0xc2cad2, roughness: 0.5, metalness: 0.0, env: 0.55 },
-    rig: { key: [0xfff5e2, 1.5], fill: [0xcfe0f5, 0.5], rim: [0xffffff, 0.4] },
-    fog: [0xcdd8e2, 13, 40], envInt: 1.0,
+    rig: { key: [0xfff0d8, 2.5], fill: [0xcfe0f5, 0.32], rim: [0xffffff, 0.0] },
+    sun: [5.4, 7.4, 3.9], shadow: { radius: 3.2, opacity: 0.34 },
+    fog: [0xc3d2e0, 34, 95], envInt: 1.0, cabin: 0.66,
   },
 ];
 
@@ -87,6 +92,7 @@ const DEFAULT_FLEET = [
     label: "Sports",
     urls: ["assets/models/corvette/car.glb?v=2"],
     mats: { Rim_Alloy: "alloy" },
+    cabin: ["Interior"],
     credit: "Vehicle 3D model © Martin Trafas · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/chevrolet-corvette-c7-2b509d1bce104224b147c81757f6f43a",
   },
@@ -94,6 +100,7 @@ const DEFAULT_FLEET = [
     id: "truck",
     label: "Truck",
     urls: ["assets/models/truck/truck.glb?v=4"], // bump ?v= when the model file changes
+    cabin: ["Color_M08"], // seats, dash, wheel
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2018-ford-f-150-lariat-super-crew-014ebfab735341248431da3d6447bbb5",
   },
@@ -104,6 +111,7 @@ const DEFAULT_FLEET = [
     // X5 M Competition: Shadow Line window frames, B-pillars and grilles are
     // high-gloss black (the model shipped them flat gray)
     mats: { Color_M08: "pianoBlack", Grille1: "pianoBlack", Grille2: "pianoBlack", jean_blue: "pianoBlack" },
+    cabin: ["Interior", "Interior1"],
     credit: "Vehicle 3D model © David_Holiday · CC BY 4.0 · modified",
     creditUrl: "https://sketchfab.com/3d-models/2020-bmw-x5-m-competition-9b211d525797457e988c903f67d0b753",
   },
@@ -135,9 +143,31 @@ const PAINT_EXACT_RE = /^body[ _-]?paint$/i;
 const BODY_RE = /body|paint|carpaint|carroceria|shell|exterior/i;
 const NOT_PAINT_RE = /chrome|glass|interior|trim|tire|tyre|rim|wheel|light|lamp|caliper|grille|mirror|plate|leather|seat|shadow/i;
 
-function tintScalar(vlt) {
-  if (vlt == null) return 1.0; // factory glass
-  return Math.pow(vlt / 100, 0.85);
+// How dark a tinted window LOOKS from outside. Tint works twice: it cuts the
+// daylight getting into the cabin, then cuts your view of that cabin coming
+// back out — which is why real 5% reads as black while 20% still shows shapes.
+// A one-way multiply made 5% look like ~25%. So:
+//   view through a pane  = its own transmission (slightly steepened: the far
+//                          side of the car is seen through a second pane)
+//                        × how lit the cabin is
+//   cabin light          = daylight admitted by ALL the glass — the windshield
+//                          carries ~30%, sides and back the rest — which also
+//                          drives the interior's own glow (applyCabin)
+const T = (vlt) => (vlt == null ? 1 : Math.max(0, Math.min(1, vlt / 100)));
+function cabinLight(vlts) {
+  const v = vlts || {};
+  return 0.3 * T(v.windshield) + 0.7 * (T(v.front) + T(v.rear) + T(v.back)) / 3;
+}
+function tintScalar(vlt, light = 1) {
+  return Math.pow(T(vlt), 1.35) * (0.35 + 0.65 * light);
+}
+// The cabin sits in the roof's shadow, so through clear glass it rendered as a
+// dark hole and every shade looked alike. Give the interior the daylight a
+// real cabin gets (a self-lit term on its own colour/texture), scaled by the
+// studio set and by how much light the current tint lets in.
+function applyCabin() {
+  const k = (state.cabinEnv != null ? state.cabinEnv : 0.5) * (state.cabinLight != null ? state.cabinLight : 1);
+  (state.cabinMats || []).forEach((m) => { m.emissiveIntensity = k * (state.cabinDim != null ? state.cabinDim : 1); });
 }
 
 function glassMat(name) {
@@ -816,8 +846,23 @@ function prepareCar(root, cfg) {
   }
 
   applyFinishes(root, cfg, bodyMats);
+  // interior materials: declared per model, else by name
+  const cabinMats = [];
+  const cabinNames = cfg && cfg.cabin;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (!m || !m.emissive || cabinMats.includes(m) || bodyMats.includes(m)) return;
+      const nm = m.name || "";
+      if (cabinNames ? !cabinNames.includes(nm) : !/interior|seat|dashboard|upholst|leather|cabin/i.test(nm)) return;
+      if (m.map) { m.emissiveMap = m.map; m.emissive.setScalar(1); } else m.emissive.copy(m.color);
+      m.userData.cabin = true;
+      m.needsUpdate = true;
+      cabinMats.push(m);
+    });
+  });
   normalizeCar(root);
-  return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow };
+  return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow, cabinMats };
 }
 
 // ---------------------------------------------------------------- brand plates
@@ -1148,6 +1193,55 @@ function makeCyc(mat) {
   return cyc;
 }
 
+// Open Sky's ground: an asphalt lot. Speckled aggregate (procedural, tiled)
+// for scale, and a radial fade so its far edge dissolves into the HDRI's
+// landscape instead of ending in a line.
+let _outdoorGround = null;
+function outdoorGround() {
+  if (_outdoorGround) return _outdoorGround;
+  const c = document.createElement("canvas");
+  c.width = c.height = 512;
+  const x = c.getContext("2d");
+  x.fillStyle = "#5c5f62"; x.fillRect(0, 0, 512, 512);   // fine aggregate only — any larger feature would show the tiling
+  let seed = 9;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 26000; i++) {           // aggregate: light and dark flecks
+    const v = rnd(), g = v < 0.5 ? 40 + rnd() * 30 : 105 + rnd() * 60;
+    x.fillStyle = `rgba(${g},${g},${g + 3},${0.25 + rnd() * 0.45})`;
+    const r = 0.5 + rnd() * 1.3;
+    x.fillRect(rnd() * 512, rnd() * 512, r, r);
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(46, 46);
+  if (state.renderer) map.anisotropy = state.renderer.capabilities.getMaxAnisotropy();
+  const a = document.createElement("canvas");
+  a.width = a.height = 256;
+  const ax = a.getContext("2d");
+  const g = ax.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0, "#fff"); g.addColorStop(0.42, "#fff"); g.addColorStop(0.96, "#000"); g.addColorStop(1, "#000");
+  ax.fillStyle = g; ax.fillRect(0, 0, 256, 256);
+  _outdoorGround = new THREE.MeshStandardMaterial({
+    map, alphaMap: new THREE.CanvasTexture(a), transparent: true, roughness: 0.93, metalness: 0, envMapIntensity: 0.5,
+  });
+  return _outdoorGround;
+}
+
+// Which ground the car stands on: the studio sweep, the outdoor lot, or (for
+// the architectural dioramas) the plain flat floor.
+function applySetGeometry() {
+  const e = ENVIRONMENTS.find((x) => x.id === state.envId) || ENVIRONMENTS[0];
+  const building = !!state.buildingPrep, outdoor = !building && !!e.outdoor;
+  if (state.cyc) state.cyc.visible = !building && !outdoor;
+  if (state.floor) {
+    state.floor.visible = building || outdoor;
+    state.floor.material = outdoor ? outdoorGround() : state.floorMat;
+    state.floor.scale.setScalar(outdoor ? 1.6 : 1);
+    state.floor.renderOrder = outdoor ? -1 : 0;
+  }
+}
+
 // Studio reflections: car photography lives on long softbox / strip-light
 // highlights running down the body, over a clean neutral studio. (The studio
 // HDRIs were photos of real rooms — their brown walls and gear reflected in
@@ -1246,17 +1340,16 @@ function loadCar(cfg) {
     disposeCar(); // swap: remove the outgoing car only now
     const fb = state.scene.getObjectByName("FallbackShadow");
     if (fb) fb.visible = false;
-    if (state.cyc) state.cyc.visible = !prep.building;
-    if (state.floor) state.floor.visible = !!prep.building;
     if (!prep.building) bakeContactShadow(root);
     else if (state.cs) state.cs.plane.visible = false;
     state.scene.add(root);
     state.renderer.shadowMap.needsUpdate = true; // new shadow caster in the scene
     Object.assign(state, {
-      carRoot: root, bodyMats: prep.bodyMats,
+      carRoot: root, bodyMats: prep.bodyMats, cabinMats: prep.cabinMats || [],
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
     });
     state.carReady = true;
+    applyCabin(); // the new car's interior takes the current studio + tint light
     setTimeout(preloadEnvironments, 1200); // warm all HDRIs so picker swaps don't stall
     if (prep.building) {
       state.buildingPrep = prep;
@@ -1264,11 +1357,13 @@ function loadCar(cfg) {
       state.scene.fog = null; // car-tuned fog (10..26) would haze the diorama at ortho distance 16
       clearPlates(); // the outgoing car's license plates must not float in the diorama
       if (state.controls) state.controls.enabled = false; // locked isometric view
+      applySetGeometry();
       applyBuildingView(state.buildingView || "exterior");
       applyBuildingFilm(state.buildingFilm);
     } else {
       const wasBuilding = !!state.buildingPrep;
       state.buildingPrep = null;
+      applySetGeometry();
       if (wasBuilding) restoreCarCamera();
       addPlates(cfg, prep);
     }
@@ -1435,6 +1530,7 @@ function mount(container) {
   catcher.position.y = 0.005;
   catcher.receiveShadow = true;
   scene.add(catcher);
+  state.catcher = catcher;
   scene.add(contactShadow()); // faint blob kept underneath for contact darkening
 
   state.plateGroup = new THREE.Group();
@@ -1540,7 +1636,7 @@ function ensureRevealRig() {
     if (!o.isMesh) return;
     const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
     for (const m of ms) {
-      if (!m.emissive || m.emissiveIntensity <= 0) continue;
+      if (!m.emissive || m.emissiveIntensity <= 0 || m.userData.cabin) continue;
       if (m.emissive.r + m.emissive.g + m.emissive.b < 0.05) continue;
       lampSet.add(m);
       const b = new THREE.Box3().setFromObject(o);
@@ -1579,6 +1675,8 @@ function releaseRevealRig(restore) {
     }
     for (const s of rig.spots) { state.scene.remove(s.target); state.scene.remove(s); s.dispose(); }
   }
+  state.cabinDim = 1;
+  applyCabin();
   state.revealRig = null;
 }
 
@@ -1589,6 +1687,8 @@ function revealLights(le) {
   // 0.4 / 0.55 mirror the studio rig's fill/rim intensities set at mount
   if (state.fillLight) state.fillLight.intensity = 0.4 * (0.05 + 0.95 * le);
   if (state.rimLight) state.rimLight.intensity = 0.55 * (0.08 + 0.92 * le);
+  state.cabinDim = 0.05 + 0.95 * le; // the cabin comes up with the room, it isn't a lamp
+  applyCabin();
   if (state.revealRig) {
     for (const [m, base] of state.revealRig.env) m.envMapIntensity = base * (0.05 + 0.95 * le);
     // headlights burn through the dark beat, then switch off as the room brightens
@@ -1783,6 +1883,8 @@ function applyEnvironment(id) {
   }
   if (sc.fog) { sc.fog.color.set(e.fog[0]); sc.fog.near = e.fog[1]; sc.fog.far = e.fog[2]; }
   state.renderer.toneMappingExposure = e.exposure;
+  state.cabinEnv = e.cabin;
+  applyCabin();
   // floor
   if (state.floorMat) {
     state.floorMat.color.set(e.floor.color);
@@ -1797,6 +1899,14 @@ function applyEnvironment(id) {
   setL(state.keyLight, e.rig.key);
   setL(state.fillLight, e.rig.fill);
   setL(state.rimLight, e.rig.rim);
+  if (!state.buildingPrep) {
+    // studio key overhead; outdoors the key is the sun where the sky has it
+    const kp = e.sun || KEY_POS;
+    if (state.keyLight) { state.keyLight.position.set(kp[0], kp[1], kp[2]); state.keyLight.shadow.radius = e.shadow ? e.shadow.radius : 9; }
+    if (state.catcher) state.catcher.material.opacity = e.shadow ? e.shadow.opacity : 0.17;
+  }
+  sc.backgroundBlurriness = 0;
+  applySetGeometry();
   // studio sets: the neutral softbox studio (synchronous, cached); outdoor:
   // the real HDRI env map (async) — reflections + image-based light
   if (e.studio) {
@@ -1808,7 +1918,7 @@ function applyEnvironment(id) {
   loadHDRI(e.hdri, (env) => {
     if (state.envId !== e.id) return; // switched again mid-load
     sc.environment = env.pmrem;
-    if (e.bg.hdri) sc.background = env.equirect;
+    if (e.bg.hdri) { sc.background = env.equirect; sc.backgroundBlurriness = e.bg.blur || 0; }
     state.envBackground = sc.background;
     if (state.renderer) { state.renderer.shadowMap.needsUpdate = true; state.renderer.render(state.scene, state.camera); }
   });
@@ -1899,19 +2009,26 @@ window.VIEWER3D = {
   credit: "",
   zones: ZONES,
   environments: ENVIRONMENTS.map((e) => ({ id: e.id, name: e.name, swatch: e.swatch })),
-  get environment() { return state.envId; },
+  // the set the viewer is showing OR already fading to — the swap lands after
+  // a short cross-fade, and a caller asking "what's selected?" right after
+  // setEnvironment must get the new answer, not the outgoing set
+  get environment() { return state.envTarget || state.envId; },
   setEnvironment(id) {
     const e = ENVIRONMENTS.find((x) => x.id === id);
-    if (state.envFadeEl && e && state.envId !== id) {
+    if (!e) return;
+    const from = state.envTarget || state.envId;
+    state.envTarget = id; // latest request wins, whatever is still mid-fade
+    if (state.envFadeEl && from !== id) {
       // fade toward the new set's tone, swap while covered, fade back — smooth
       state.envFadeEl.style.background = e.swatch || "#cfd3d7";
       state.envFadeEl.style.opacity = "0.92";
       setTimeout(() => {
+        if (state.envTarget !== id) return; // superseded by a later pick
         applyEnvironment(id);
         if (state.renderer) state.renderer.render(state.scene, state.camera);
         requestAnimationFrame(() => { state.envFadeEl.style.opacity = "0"; });
       }, 170);
-    } else applyEnvironment(id);
+    } else if (state.envId !== id) applyEnvironment(id);
   },
   get carReady() { return state.carReady; },
   loadCar(idOrCfg) {
@@ -1922,10 +2039,13 @@ window.VIEWER3D = {
   // vlts: {windshield, front, rear, back} — null/undefined = factory glass
   setTint(vlts) {
     if (!state.zoneMats) return;
+    const light = cabinLight(vlts);
+    state.cabinLight = light;
     ZONES.forEach((z) => {
       const m = state.zoneMats[z];
-      if (m) m.color.setScalar(tintScalar(vlts && vlts[z] != null ? vlts[z] : null));
+      if (m) m.color.setScalar(tintScalar(vlts && vlts[z] != null ? vlts[z] : null, light));
     });
+    applyCabin();
   },
   // cinematic reveal (armed by the app before the first car shows)
   armReveal,
