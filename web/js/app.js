@@ -154,6 +154,57 @@
     return (window.VIEWER3D && window.VIEWER3D.fleet) || [];
   }
 
+  // ---------- hidden car ----------
+  // Typing the code swaps the selected vehicle slot for the hidden car, with
+  // the showroom reveal replayed on it; typing it again on that slot brings
+  // the slot's own car back. The other tabs keep their cars.
+  const HIDDEN = { code: "supra", id: "supra" };
+  let hiddenSlot = null;     // fleet id whose slot holds the hidden car
+  let hiddenReveal = false;  // the next car to arrive plays the reveal
+  function hiddenCar() {
+    return (window.VIEWER3D && window.VIEWER3D.hiddenCars && window.VIEWER3D.hiddenCars[HIDDEN.id]) || null;
+  }
+  // what the 3D stage should be showing for the selected tab
+  function stagedCar() { return hiddenSlot && hiddenSlot === S.vehicle ? HIDDEN.id : S.vehicle; }
+
+  function toggleHiddenCar() {
+    const v3 = window.VIEWER3D;
+    if (!MODE_3D || S.space !== "vehicles" || !v3 || !v3.carReady || !hiddenCar() || qs.get("car")) return;
+    if (hiddenSlot === S.vehicle) {
+      hiddenSlot = null;
+      v3.loadCar(S.vehicle);
+      renderStageTools();
+      return;
+    }
+    hiddenSlot = S.vehicle;
+    const calm = qs.get("noreveal") || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (!calm && v3.armReveal) {
+      hiddenReveal = true;
+      v3.armReveal({ hideCar: true }); // lights out the moment the code lands
+      $("stage").classList.add("cine");
+    }
+    v3.loadCar(HIDDEN.id);
+    renderStageTools();
+  }
+
+  let typedCode = "";
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || !e.key || e.key.length !== 1) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""))) return;
+    typedCode = (typedCode + e.key.toLowerCase()).slice(-HIDDEN.code.length);
+    if (typedCode === HIDDEN.code) { typedCode = ""; toggleHiddenCar(); }
+  });
+
+  // the hidden car's file didn't load: put the slot (and the lights) back
+  document.addEventListener("viewer3d-car-failed", () => {
+    hiddenSlot = null;
+    hiddenReveal = false;
+    if (window.VIEWER3D && window.VIEWER3D.disarmReveal) window.VIEWER3D.disarmReveal();
+    $("stage").classList.remove("cine");
+    renderStageTools();
+  });
+
   // ---------- architectural (building) stage ----------
   function bSel() { return S.b[S.space]; }
   function bSeries() { return BCAT.products[bSel().series]; }
@@ -243,7 +294,7 @@
         }
         if (window.VIEWER3D.isBuilding) {
           // a building space replaced the car in the scene — reload the car
-          window.VIEWER3D.loadCar(S.vehicle);
+          window.VIEWER3D.loadCar(stagedCar());
         } else if (window.VIEWER3D.credit) {
           // car still loaded: no car-loaded event will fire — re-run its
           // listener so credit/tabs re-render
@@ -304,8 +355,9 @@
   // also (re)renders the vehicle tabs — the fleet isn't known until the module loads
   document.addEventListener("viewer3d-car-loaded", () => {
     if (!MODE_3D || !window.VIEWER3D) return;
-    if (!bootedOnce) {
+    if (!bootedOnce || hiddenReveal) {
       bootedOnce = true;
+      hiddenReveal = false;
       if (window.VIEWER3D.playReveal)
         window.VIEWER3D.playReveal().then(() => $("stage").classList.remove("cine"));
       else $("stage").classList.remove("cine");
@@ -624,12 +676,12 @@
       tabs.parentElement.style.display = "";
       const refocusVeh = keepFocus(tabs);
       tabs.innerHTML = fleet.map((v) =>
-        `<button class="veh-btn ${v.id === S.vehicle ? "active" : ""}" aria-pressed="${v.id === S.vehicle}" data-v="${v.id}">${v.label}</button>`).join("");
+        `<button class="veh-btn ${v.id === S.vehicle ? "active" : ""}" aria-pressed="${v.id === S.vehicle}" data-v="${v.id}">${v.id === hiddenSlot && hiddenCar() ? hiddenCar().label : v.label}</button>`).join("");
       tabs.querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => {
           if (b.dataset.v === S.vehicle) return; // already showing this vehicle
           S.vehicle = b.dataset.v;
-          if (MODE_3D) { window.VIEWER3D.loadCar(S.vehicle); renderStageTools(); }
+          if (MODE_3D) { window.VIEWER3D.loadCar(stagedCar()); renderStageTools(); }
           else { renderStageTools(); renderVehicle(); }
         }));
       refocusVeh();
@@ -845,7 +897,7 @@
 
   // the 3D fleet's staged vehicle seeds the calculator's body style
   function stagedBodyStyle() {
-    const id = (S.vehicle || "").toLowerCase();
+    const id = (stagedCar() || "").toLowerCase();
     if (id.includes("truck")) return "truck";
     if (id.includes("suv")) return "suv";
     return "sedan";

@@ -119,6 +119,23 @@ const DEFAULT_FLEET = [
 
 const FLEET = window.CAR3D_FLEET || DEFAULT_FLEET;
 
+// Hidden cars: not in the fleet tabs, only reachable by a typed code (app.js
+// swaps one into the selected slot). `soft`: a failed load leaves the car on
+// stage alone instead of dropping the whole viewer to the 2D fallback.
+const HIDDEN_CARS = {
+  supra: {
+    id: "supra",
+    label: "Supra",
+    soft: true,
+    urls: ["assets/models/supra/supra.glb?v=1"],
+    mats: { Rim_Alloy: "alloy", Trim_Gloss: "pianoBlack" },
+    cabin: ["Interior", "Interior_Accent"],
+    ppfMirrors: false, // gloss-black caps
+    credit: "Vehicle 3D model © Mpgs.studio3DModels · CC BY 4.0 · modified",
+    creditUrl: "https://sketchfab.com/3d-models/toyota-supra-3d-model-free-41b83cfb912b4eab9af19a802bcf5ffc",
+  },
+};
+
 const state = {
   renderer: null, scene: null, camera: null, controls: null,
   bodyMats: [], zoneMats: null, zoneMeshes: null,
@@ -866,6 +883,9 @@ function prepareCar(root, cfg) {
   normalizeCar(root);
   bodyMats.forEach(installPPF);
   const ppfFrame = measureForPPF(root, bodyMats, zoneMeshes, carAxis);
+  // unpainted mirror caps: nothing to film there, and on a wide-hipped body the
+  // mirror rule would catch the door's shoulder instead
+  if (ppfFrame && cfg && cfg.ppfMirrors === false) ppfFrame.mirror = 99;
   return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow, cabinMats, ppfFrame };
 }
 
@@ -1519,6 +1539,10 @@ function loadCar(cfg) {
   const done = (root, prep) => {
     if (isStale()) { disposeRoot(root); return; }
     disposeCar(); // swap: remove the outgoing car only now
+    if (state.revealHid) { // a swap-reveal hid the outgoing car's stage dressing
+      if (state.plateGroup) state.plateGroup.visible = true;
+      state.revealHid = null;
+    }
     const fb = state.scene.getObjectByName("FallbackShadow");
     if (fb) fb.visible = false;
     if (!prep.building) bakeContactShadow(root);
@@ -1557,6 +1581,11 @@ function loadCar(cfg) {
 
   const fail = (msg) => {
     if (isStale()) return; // a stale failure must not nuke a working view
+    if (cfg.soft) {
+      setLoading(null);
+      document.dispatchEvent(new CustomEvent("viewer3d-car-failed", { detail: { id: cfg.id } }));
+      return;
+    }
     setLoading(msg, false);
     document.dispatchEvent(new CustomEvent("viewer3d-unavailable",
       { detail: { building: !!(cfg && cfg.building) } }));
@@ -1882,16 +1911,30 @@ function revealLights(le) {
       s.visible = on > 0.02;
     }
   }
-  if (state.scene && state.scene.background && state.scene.background.isColor)
-    state.scene.background.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
-  if (state.scene && state.scene.fog) state.scene.fog.color.copy(state.scene.background);
+  const bg = state.scene && state.scene.background;
+  if (bg && bg.isColor) {
+    bg.lerpColors(REVEAL_DARK, REVEAL_LIGHT, le);
+    if (state.scene.fog) state.scene.fog.color.copy(bg);
+  } else if (bg && state.revealSky) {
+    // outdoor set: the real sky stays up and comes up with the lights
+    const k = 0.02 + 0.98 * le;
+    state.scene.backgroundIntensity = k;
+    if (state.scene.fog) state.scene.fog.color.copy(state.revealSky).multiplyScalar(k);
+  }
   // floor keeps its real albedo: with env/fill/rim dimmed it goes dark on its
   // own, and a black-painted floor would swallow the headlight pools entirely
 }
 
-function armReveal() {
+// hideCar: a replay for a car swap — the outgoing car leaves the stage now, so
+// the frames held while the new one loads and warms show an empty dark studio
+function armReveal(opts) {
   if (!state.persCam || !state.renderer) return;
   revealArmed = true;
+  if (opts && opts.hideCar && state.carRoot) {
+    state.revealHid = [state.carRoot, state.cs && state.cs.plane, state.plateGroup].filter((o) => o && o.visible);
+    state.revealHid.forEach((o) => { o.visible = false; });
+    state.renderer.shadowMap.needsUpdate = true;
+  }
   const c = state.persCam;
   c.fov = REVEAL.fromFov;
   c.position.set(REVEAL.fromPos[0], REVEAL.fromPos[1], REVEAL.fromPos[2]);
@@ -1902,7 +1945,13 @@ function armReveal() {
   // the dark-beat + DRL glow needs a COLOR background to lerp; env backdrops
   // are textures, so swap in the reveal color now — finish() -> restoreCarCamera
   // re-applies the chosen studio set (bg/fog/rig) at the end.
-  if (state.scene) {
+  const env = ENVIRONMENTS.find((x) => x.id === state.envId);
+  state.revealSky = null;
+  if (state.scene && env && env.outdoor && state.scene.background && state.scene.background.isTexture) {
+    // (a replay under the open sky keeps its backdrop: a flat color there
+    // would pop back to clouds at the end — it is dimmed in place instead)
+    state.revealSky = new THREE.Color(env.fog[0]);
+  } else if (state.scene) {
     state.scene.background = REVEAL_DARK.clone();
     if (state.scene.fog) state.scene.fog.color.copy(state.scene.background);
   }
@@ -1910,6 +1959,22 @@ function armReveal() {
   if (state.loadingEl) {
     state.loadingEl.style.background = "#0a0a0b"; // keep the black continuity from the opener
     state.loadingEl.classList.add("cine"); // dark spinner variant + instant (no-fade) dismissal
+  }
+}
+
+// armed, but the car it was armed for never arrived (a soft load failed):
+// bring the studio back up exactly as a finished reveal would
+function disarmReveal() {
+  if (!revealArmed || revealPlaying) return;
+  revealArmed = false;
+  (state.revealHid || []).forEach((o) => { o.visible = true; });
+  state.revealHid = null;
+  revealLights(1);
+  releaseRevealRig(true);
+  restoreCarCamera();
+  if (state.loadingEl) {
+    state.loadingEl.style.background = "";
+    state.loadingEl.classList.remove("cine");
   }
 }
 
@@ -2213,8 +2278,9 @@ window.VIEWER3D = {
     } else if (state.envId !== id) applyEnvironment(id);
   },
   get carReady() { return state.carReady; },
+  hiddenCars: HIDDEN_CARS,
   loadCar(idOrCfg) {
-    const cfg = typeof idOrCfg === "string" ? FLEET.find((f) => f.id === idOrCfg) : idOrCfg;
+    const cfg = typeof idOrCfg === "string" ? (FLEET.find((f) => f.id === idOrCfg) || HIDDEN_CARS[idOrCfg]) : idOrCfg;
     if (cfg) loadCar(cfg);
   },
   setPaint(hex) { state.bodyMats.forEach((m) => m.color.set(hex)); },
@@ -2241,6 +2307,7 @@ window.VIEWER3D = {
   // cinematic reveal (armed by the app before the first car shows)
   armReveal,
   playReveal,
+  disarmReveal,
   revealScrub: (ms) => { ensureRevealRig(); revealApply(Math.min(1, ms / REVEAL.dur)); }, // frame-stepping for visual QA (use with ?revealDebug)
   revealRigInfo() { // QA: what the reveal rig collected
     const r = state.revealRig;

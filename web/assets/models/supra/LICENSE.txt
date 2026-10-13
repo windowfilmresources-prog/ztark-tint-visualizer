@@ -1,0 +1,25 @@
+Model Information:
+* title:	Toyota Supra 3D Model (Free)
+* source:	https://sketchfab.com/3d-models/toyota-supra-3d-model-free-41b83cfb912b4eab9af19a802bcf5ffc
+* author:	Mpgs.studio3DModels (https://sketchfab.com/mpgs.studio)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Toyota Supra 3D Model (Free)" (https://sketchfab.com/3d-models/toyota-supra-3d-model-free-41b83cfb912b4eab9af19a802bcf5ffc) by Mpgs.studio3DModels (https://sketchfab.com/mpgs.studio) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Modifications by ZTARK (windowfilmresources-prog, 2026-10):
+- De-identified: nose and tail emblems, rear lettering and wheel-cap logos
+  removed.
+- Interior: the source file's seats, steering wheel and dashboard tub were
+  removed (their object names mark them as third-party parts, not the
+  author's own work) and replaced with new geometry made by ZTARK - seats,
+  dashboard, centre console, door cards, steering wheel, load bay. An opaque
+  sheet under the back glass was removed so the window is see-through.
+- Geometry reduced from about 2.6M to 0.53M triangles (one subdivision level
+  removed where the mesh allowed, tyres and calipers decimated); the missing
+  fourth brake caliper and the two missing wheel centre caps were completed
+  from the car's own parts.
+- Materials rebuilt (body paint -> Body_Paint, glass split into window panes
+  and lamp lenses, rims, lamps). Draco-compressed, no textures.
