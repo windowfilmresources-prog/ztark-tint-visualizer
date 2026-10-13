@@ -127,8 +127,13 @@ const HIDDEN_CARS = {
     id: "supra",
     label: "Supra",
     soft: true,
-    urls: ["assets/models/supra/supra.glb?v=1"],
+    urls: ["assets/models/supra/supra.glb?v=2"],
     mats: { Rim_Alloy: "alloy", Trim_Gloss: "pianoBlack" },
+    // long hood and broad haunches face the top softbox square-on: at the
+    // fleet's settings the paint floods with white sheen and reads washed out.
+    // A little less room reflection and no white base-coat sheen: the clear
+    // coat keeps the crisp highlights, colours stay deep, white stays white.
+    paint: { envMapIntensity: 0.8, specularIntensity: 0 },
     cabin: ["Interior", "Interior_Accent"],
     ppfMirrors: false, // gloss-black caps
     credit: "Vehicle 3D model © Mpgs.studio3DModels · CC BY 4.0 · modified",
@@ -806,6 +811,7 @@ function prepareCar(root, cfg) {
   for (const m of (exactPaintMats.length ? exactPaintMats : heuristicPaintMats)) {
     bodyMats.push(adoptPaint(root, m));
   }
+  if (cfg && cfg.paint) bodyMats.forEach((m) => Object.assign(m, cfg.paint)); // per-car paint tuning
 
   // Paint fallback: no material name matched — take the largest-surface-area
   // colored materials (the body shell dominates every car's exterior area).
