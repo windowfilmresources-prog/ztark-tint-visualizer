@@ -415,3 +415,27 @@ html.zt-enter .panel .card:nth-child(n+5) { animation-delay: .5s; }
   html.zt-enter * { animation: none !important; }
   .veh-btn:active, .series-tabs button:active, .toggle-btn:active, .shade-chips button:active { transform: none; }
 }
+
+/* ---------- Tint | Paint Protection mode ---------- */
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 14px;
+  border: 1.5px solid var(--accent); border-radius: var(--chip-radius, 8px); overflow: hidden; background: var(--panel-bg); }
+.mode-switch[hidden] { display: none; }
+.mode-switch button { font-family: var(--heading-font); font-size: 13px; letter-spacing: .06em; padding: 12px 10px; cursor: pointer;
+  border: 0; background: transparent; color: var(--panel-text); text-transform: var(--nav-transform, none); transition: background .18s, color .18s; }
+.mode-switch button.active { background: var(--accent); color: var(--accent-text, #fff); }
+.mode-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+body:not(.mode-ppf) .ppf-only { display: none; }
+body.mode-ppf .tint-only { display: none !important; }
+.ppf-cover { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.ppf-cover button { text-align: left; padding: 11px 12px; cursor: pointer; border: 1.5px solid var(--line, #ddd); background: transparent;
+  color: var(--panel-text); border-radius: var(--chip-radius, 8px); transition: border-color .15s, background .15s, color .15s; }
+.ppf-cover button b { display: block; font-family: var(--heading-font); font-size: 13px; letter-spacing: .04em; font-weight: 600;
+  text-transform: var(--nav-transform, none); }
+.ppf-cover button span { display: block; font-size: 11px; line-height: 1.4; color: var(--muted, #888); margin-top: 3px; }
+.ppf-cover button:hover { border-color: var(--accent); }
+.ppf-cover button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text, #fff); }
+.ppf-cover button.active span { color: var(--accent-text, #fff); opacity: .8; }
+.ppf-cover button:active { transform: scale(.98); }
+#ppfSpecs .spec .val { font-size: 14.5px; line-height: 1.2; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 560px) { .ppf-cover { grid-template-columns: 1fr; } #ppfSpecs { grid-template-columns: repeat(2, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .ppf-cover button:active { transform: none; } }

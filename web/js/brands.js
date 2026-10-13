@@ -106,6 +106,54 @@ window.BRANDS = {
     // official lockup (autobahnwindowfilms.com) split into registered layers so
     // the stripes can drive in on their own — see intro.js PARTS
     intro: { pull: "forward", logo: "assets/intro-ab-lockup.png", parts: "autobahn", speed: true, kicker: "NO LIMITS", sub: "SINCE 2011", rule: false, bg: "#0a0a0b", accent: "#a91e22", font: "'Orbitron',sans-serif" },
+    // Paint protection film (PPF simulator). Body films only — the line also has
+    // Geist (windshield), Smök (lights) and Incognito Marine. Copy and figures
+    // from autobahnwindowfilms.com product pages; `finish` keys viewer3d PPF_FINISH.
+    ppf: {
+      accent: "#7fd4ff", // coverage wash + film-edge line on the car: icy blue reads on every paint, red included
+      films: [
+        { name: "Incognito X", finish: "gloss", kind: "Clear gloss · the new flagship",
+          tagline: "A new generation of the flagship: the highest gloss in the Autobahn line and reinforced rock-chip durability — virtually invisible at 8 mil.",
+          specs: [["8 mil", "Thickness"], [">88 GU", "Gloss"], ["Self-healing", "Top coat"], ["Lifetime", "Warranty"]],
+          note: "Limited lifetime warranty plus the $500 No-Fault benefit — registered authorized installs only." },
+        { name: "Incognito", finish: "gloss", kind: "Clear gloss · the icon",
+          tagline: "Glass-like gloss over invisible armor. It disappears into the paint and heals its own swirl marks.",
+          specs: [["High gloss", "Finish"], ["Self-healing", "Top coat"], ["Invisible", "Edge"], ["Lifetime", "Warranty"]],
+          note: "Lifetime warranty — registered authorized installs only." },
+        { name: "Stärke", finish: "gloss", kind: "Clear gloss · the workhorse",
+          tagline: "German for strength: self-healing TPU with a hydrophobic top coat, at a price that makes covering the whole front end an easy yes.",
+          specs: [["Gloss", "Finish"], ["Self-healing", "TPU"], ["Hydrophobic", "Top coat"], ["10 years", "Warranty"]],
+          note: "10-year warranty — registered authorized installs only." },
+        { name: "Road Guard", finish: "gloss", kind: "Clear gloss · V5",
+          tagline: "Virtually invisible high-gloss film for the car that gets driven — now V5, with a faster-healing top coat and better bonding on complex curves.",
+          specs: [["High gloss", "Finish"], ["V5 fast-heal", "Top coat"], ["Hydrophobic", "Surface"], ["10 years", "Warranty"]],
+          note: "10-year limited warranty — registered authorized installs only." },
+        { name: "Rüstung", finish: "gloss", kind: "Clear gloss · off-road grade",
+          tagline: "German for armor: the thickest film in the line — 10 mil on an 8 mil TPU core, for trucks, overlanders and anything that leaves the pavement.",
+          specs: [["10 mil", "Thickness"], [">80 GU", "Gloss"], ["Self-healing", "Top coat"], ["10 years", "Warranty"]],
+          note: "Limited 10-year warranty — registered authorized installs only." },
+        { name: "Halt", finish: "gloss", kind: "Clear gloss · the newcomer",
+          tagline: "German for hold: the newest Autobahn film — self-healing TPU protection where accessible pricing meets the badge's standard.",
+          specs: [["Gloss", "Finish"], ["Self-healing", "TPU"], ["Authorized", "Install"], ["Ask dealer", "Warranty"]],
+          note: "Warranty terms ship with the film — your authorized dealer can walk you through them." },
+        { name: "Blak", finish: "blak", kind: "Color film · piano black",
+          tagline: "Piano-black, high-gloss armor. Run it across the whole car, or black out the hood, roof and mirror caps.",
+          specs: [["Piano black", "Finish"], ["Self-healing", "Top coat"], ["Hydrophobic", "Surface"], ["10 years", "Warranty"]],
+          note: "10-year limited warranty — registered authorized installs only." },
+        { name: "Matte Blak", finish: "matteblak", kind: "Color film · satin black",
+          tagline: "The matte-paint look, as armor: satin black over any factory finish, with rock-chip protection built into the look.",
+          specs: [["Satin black", "Finish"], ["Self-healing", "Top coat"], ["Hydrophobic", "Surface"], ["10 years", "Warranty"]],
+          note: "10-year limited warranty — registered authorized installs only." },
+        { name: "Gunmetal Gray", finish: "gunmetal", kind: "Color film · gunmetal",
+          tagline: "A military-inspired gunmetal tone in protection film, not vinyl — the color change that outlasts a wrap.",
+          specs: [["Gunmetal", "Finish"], ["Self-healing", "Top coat"], ["Hydrophobic", "Surface"], ["10 years", "Warranty"]],
+          note: "10-year warranty — registered authorized installs only." },
+        { name: "Carbon", finish: "carbon", kind: "Color film · carbon weave",
+          tagline: "A carbon-fiber weave formed into the film itself — protection you are meant to notice, on hoods, roofs and accents or the full car.",
+          specs: [["Carbon weave", "Finish"], ["Self-healing", "Top coat"], ["Hydrophobic", "Surface"], ["10 years", "Warranty"]],
+          note: "10-year limited warranty — registered authorized installs only." },
+      ],
+    },
     savings: true, // fuel & energy savings estimator card
     defaultShade: { seriesIdx: 1, vlt: 15, sku: 15 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
@@ -193,6 +241,24 @@ window.BRANDS = {
     intro: { kind: "strike", rule: false, logo: "assets/intro-edge-word.png", sub: "ENGINEERED TO ELEVATE", bg: "#ffffff", accent: "#0d1b3d", fg: "#0d1b3d", dim: "rgba(13,27,61,.4)", font: "'Gothic A1',sans-serif" },
     defaultShade: { seriesIdx: 0, vlt: 20, sku: 20 },
     // the brand site's own dealer-locator page (hosts the iframed z-tark locator)
+    // Paint protection film (PPF simulator) — programedge.com Premium Defense line
+    ppf: {
+      accent: "#7fd4ff",
+      films: [
+        { name: "Premium Defense Gloss", finish: "gloss", kind: "Clear gloss",
+          tagline: "A nearly invisible, glass-like gloss finish that shields against scratches, rock chips and other road hazards.",
+          specs: [["Glass-like", "Gloss finish"], ["Self-healing", "Surface"], ["Hydrophobic", "Top coat"], ["7 years", "Warranty"]],
+          note: "Limited seven-year warranty." },
+        { name: "Premium Defense Matte", finish: "matte", kind: "Clear matte",
+          tagline: "Transforms glossy paint into a sleek, modern matte look while shielding against scratches, rock chips and road hazards.",
+          specs: [["Matte", "Finish"], ["Self-healing", "Surface"], ["Hydrophobic", "Top coat"], ["7 years", "Warranty"]],
+          note: "Limited seven-year warranty." },
+        { name: "Premium Defense Black", finish: "blak", kind: "Color film · piano black",
+          tagline: "A high-gloss piano black for a full blackout, or for hoods, roofs and mirror caps — bold contrast with always-on protection.",
+          specs: [["Piano black", "Finish"], ["Self-healing", "Surface"], ["Hydrophobic", "Top coat"], ["7 years", "Warranty"]],
+          note: "Limited seven-year warranty." },
+      ],
+    },
     dealerUrl: "https://programedge.com/dealer-locator/", dealerCta: "Find a Dealer Near You",
     ctaTagline: "Find an Edge dealer near you to request a quote.",
     products: [

@@ -303,7 +303,7 @@ function analyzeGlass(meshes) {
     sides.forEach((c) => { c.zone = c.u >= cut ? "front" : "rear"; });
   });
   list.forEach((c) => c.tris.forEach((t) => { t.zone = c.zone || "rear"; }));
-  return { perMesh };
+  return { perMesh, axis, frontSign };
 }
 
 function splitGlass(mesh, frame) {
@@ -744,6 +744,7 @@ function prepareCar(root, cfg) {
   const glassMeshes = [];
   let hasBakedShadow = false;
 
+  let carAxis = { axis: "z", frontSign: 1 }; // refined by the glass analysis when it runs
   const zones = cfg.glassZones;
   const zoneOf = (o) => {
     if (!zones) return null;
@@ -830,6 +831,7 @@ function prepareCar(root, cfg) {
     const extraGlass = { roof: glassMat("Glass_roof"), lamp: glassMat("Glass_lamp") };
     extraGlass.roof.color.setRGB(0.2, 0.21, 0.22);
     const frame = analyzeGlass(glassMeshes);
+    carAxis = { axis: frame.axis, frontSign: frame.frontSign };
     glassMeshes.forEach((glass) => {
       const parts = splitGlass(glass, frame);
       const parent = glass.parent;
@@ -862,7 +864,9 @@ function prepareCar(root, cfg) {
     });
   });
   normalizeCar(root);
-  return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow, cabinMats };
+  bodyMats.forEach(installPPF);
+  const ppfFrame = measureForPPF(root, bodyMats, zoneMeshes, carAxis);
+  return { bodyMats, zoneMats, zoneMeshes, hasBakedShadow, cabinMats, ppfFrame };
 }
 
 // ---------------------------------------------------------------- brand plates
@@ -1100,6 +1104,183 @@ function applyFinishes(root, cfg, bodyMats) {
     else if (!key && !m.map && /chrome/i.test(nm) && m.metalness > 0.8) key = "chrome";
     if (key) applyFinish(root, m, key);
   });
+}
+
+// ---------------------------------------------------------------- paint protection film
+// PPF simulator: the paint shader itself decides, per pixel, whether a film
+// covers that spot (so coverage edges are clean lines, not jagged triangles)
+// and renders the film's finish there — clear gloss, satin matte, or a colour
+// film (piano black, satin black, gunmetal, carbon weave). Coverage packages
+// are the trade's own: partial front, full front, track pack, full vehicle,
+// plus hood/roof/mirror accents for the color films. All masks are measured
+// from the car's own geometry (measureForPPF), never hard-coded per model.
+const PPF_MODES = { partial: 1, front: 2, track: 3, vehicle: 4, accents: 5 };
+const PPF_FINISH = {
+  // rough / metal < 0 = keep the paint's own; cc = clear-coat amount, ccr = its roughness
+  gloss:     { rough: -1, metal: -1, cc: 1.0, ccr: 0.03, color: null, rest: 0.13 },
+  matte:     { rough: 0.6, metal: -1, cc: 0.14, ccr: 0.55, color: null, rest: 0.1 },
+  blak:      { rough: 0.3, metal: 0.0, cc: 1.0, ccr: 0.03, color: 0x040405, rest: 0 },
+  matteblak: { rough: 0.72, metal: 0.0, cc: 0.08, ccr: 0.6, color: 0x0b0b0c, rest: 0 },
+  gunmetal:  { rough: 0.5, metal: 0.55, cc: 0.2, ccr: 0.45, color: 0x3c4044, rest: 0 },
+  carbon:    { rough: 0.34, metal: 0.15, cc: 1.0, ccr: 0.04, color: 0x0e0e0f, rest: 0, pattern: 1 },
+};
+const ppfU = {
+  ppfMode: { value: 0 },
+  ppfA: { value: new THREE.Vector4(0, 1, 1.4, 0.6) },       // axis is x?, front sign, partial edge, door edge
+  ppfB: { value: new THREE.Vector4(0.3, 0.9, 1.2, 0.95) },  // rocker top, beltline, roof line, mirror reach
+  ppfFin: { value: new THREE.Vector4(-1, -1, 1, 0.03) },
+  ppfCol: { value: new THREE.Vector4(0, 0, 0, 0) },
+  ppfAccent: { value: new THREE.Color(0x35b6ff) },
+  ppfHL: { value: 0 },
+  ppfEdge: { value: 0 },
+  ppfPattern: { value: 0 },
+  ppfC2: { value: new THREE.Vector4(0.7, 0, 0, 0) },        // hood half-width
+};
+const PPF_FRAG_HEAD = `
+varying vec3 vPpfP; varying vec3 vPpfN;
+uniform float ppfMode; uniform vec4 ppfA; uniform vec4 ppfB; uniform vec4 ppfFin; uniform vec4 ppfCol;
+uniform vec3 ppfAccent; uniform float ppfHL; uniform float ppfEdge; uniform float ppfPattern; uniform vec4 ppfC2;
+float ppfC = 0.0; float ppfE = 0.0;
+void ppfCover() {
+  if (ppfMode < 0.5) return;
+  vec3 P = vPpfP; vec3 N = normalize(vPpfN);
+  float u = (ppfA.x > 0.5 ? P.x : P.z) * ppfA.y;      // along the car, + toward the nose
+  float lat = abs(ppfA.x > 0.5 ? P.z : P.x);
+  float aa = 0.004, ln = 0.011;
+  // mirror caps: beyond the door skin, at beltline height, just behind the A-pillar base
+  float mir = smoothstep(ppfB.w, ppfB.w + aa, lat) * step(ppfB.y - 0.1, P.y) * step(P.y, ppfB.y + 0.34)
+            * step(ppfA.w - 0.8, u) * step(u, ppfA.w + 0.3);
+  float part = smoothstep(ppfA.z - aa, ppfA.z + aa, u);
+  float front = smoothstep(ppfA.w - aa, ppfA.w + aa, u);
+  float rock = 1.0 - smoothstep(ppfB.x - aa, ppfB.x + aa, P.y);
+  float eP = 1.0 - smoothstep(0.0, ln, abs(u - ppfA.z));
+  float eF = 1.0 - smoothstep(0.0, ln, abs(u - ppfA.w));
+  float eR = 1.0 - smoothstep(0.0, ln, abs(P.y - ppfB.x));
+  if (ppfMode < 1.5) { ppfC = max(part, mir); ppfE = eP; }
+  else if (ppfMode < 2.5) { ppfC = max(front, mir); ppfE = eF; }
+  else if (ppfMode < 3.5) { ppfC = max(max(front, mir), rock); ppfE = max(eF * step(ppfB.x, P.y), eR * step(u, ppfA.w)); }
+  else if (ppfMode < 4.5) { ppfC = 1.0; }
+  else {
+    float hood = front * smoothstep(0.42, 0.6, N.y) * (1.0 - smoothstep(ppfC2.x - aa, ppfC2.x + aa, lat));   // the hood panel, not the fender tops
+    float roof = smoothstep(ppfB.z - aa, ppfB.z + aa, P.y) * smoothstep(0.3, 0.5, N.y);
+    ppfC = max(max(hood, roof), mir);
+  }
+}
+vec3 ppfFilmColor() {
+  vec3 fc = ppfCol.rgb;
+  if (ppfPattern > 0.5) {                               // 2x2 twill carbon weave, in the car's own space
+    vec3 an = abs(normalize(vPpfN));
+    vec2 q = (an.y > 0.6 ? vPpfP.xz : (an.x > an.z ? vPpfP.zy : vPpfP.xy)) * 150.0;
+    float fw = max(fwidth(q.x), fwidth(q.y));
+    float tow = mod(floor(q.x) - floor(q.y), 4.0) < 2.0 ? 1.0 : 0.0;
+    vec2 f = fract(q);
+    float sh = tow > 0.5 ? sin(f.x * 3.14159) : sin(f.y * 3.14159) * 0.55;
+    float vis = clamp(1.3 - fw * 1.5, 0.0, 1.0);        // fade the weave out before it can moire
+    fc = mix(vec3(0.03), mix(vec3(0.012), vec3(0.075), sh), vis);
+  }
+  return fc;
+}
+`;
+function installPPF(m) {
+  if (!m || m.userData.ppf) return;
+  m.userData.ppf = true;
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, ppfU);
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vPpfP; varying vec3 vPpfN;")
+      .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nvPpfN = mat3(modelMatrix) * objectNormal;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvPpfP = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>\n" + PPF_FRAG_HEAD)
+      .replace("#include <color_fragment>", "#include <color_fragment>\nppfCover();\nif (ppfCol.a > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, ppfFilmColor(), ppfC);")
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, ppfFin.x < 0.0 ? roughnessFactor : ppfFin.x, ppfC);")
+      .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, ppfFin.y < 0.0 ? metalnessFactor : ppfFin.y, ppfC);")
+      .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat = mix(material.clearcoat, ppfFin.z, ppfC);\nmaterial.clearcoatRoughness = mix(material.clearcoatRoughness, max(ppfFin.w, 0.0525), ppfC);\n#endif")
+      .replace("#include <opaque_fragment>", "#include <opaque_fragment>\n{ float pk = clamp(ppfC * ppfHL + ppfE * ppfEdge, 0.0, 0.9);\n" +
+        // mix in display (gamma) space: a linear-light mix swamps dark paint — 11% read as a repaint
+        "if (pk > 0.0) gl_FragColor.rgb = pow(mix(pow(max(gl_FragColor.rgb, 0.0), vec3(0.4545)), pow(ppfAccent, vec3(0.4545)), pk), vec3(2.2)); }");
+  };
+  m.customProgramCacheKey = () => "ppf-v2";
+  m.needsUpdate = true;
+}
+// Where the film edges fall on THIS car, measured from its geometry (world
+// space after normalizeCar: metres-ish, wheels on y=0, centred).
+function measureForPPF(root, bodyMats, zoneMeshes, carAxis) {
+  const ax = carAxis.axis, lat = ax === "x" ? "z" : "x", fs = carAxis.frontSign;
+  root.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  let uMin = Infinity, uMax = -Infinity, H = 0;
+  const bodyVerts = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    if (!ms.some((m) => bodyMats.includes(m))) return;
+    const pos = o.geometry.getAttribute("position");
+    const step = Math.max(1, Math.floor(pos.count / 6000));
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      const u = v[ax] * fs;
+      if (u < uMin) uMin = u; if (u > uMax) uMax = u; if (v.y > H) H = v.y;
+      bodyVerts.push(u, v.y);
+    }
+  });
+  if (!isFinite(uMin)) return null;
+  const len = uMax - uMin, mid = (uMax + uMin) / 2;
+  let sill = Infinity;                                  // lowest paint between the wheels
+  for (let i = 0; i < bodyVerts.length; i += 2) if (Math.abs(bodyVerts[i] - mid) < len * 0.12 && bodyVerts[i + 1] < sill) sill = bodyVerts[i + 1];
+  const scan = (list, fn) => (list || []).forEach((m) => {
+    const pos = m.geometry.getAttribute("position");
+    for (let i = 0; i < pos.count; i++) fn(v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld));
+  });
+  // door leading edge ≈ under the A-pillar base = the windshield's lower outer corners
+  let wsLat = 0, door = -Infinity;
+  scan(zoneMeshes.windshield, (p) => { const l = Math.abs(p[lat]); if (l > wsLat) wsLat = l; });
+  scan(zoneMeshes.windshield, (p) => { if (Math.abs(p[lat]) > wsLat * 0.8 && p[ax] * fs > door) door = p[ax] * fs; });
+  let belt = Infinity, top = 0, gLat = 0;
+  scan([...(zoneMeshes.front || []), ...(zoneMeshes.rear || [])], (p) => {
+    if (p.y < belt) belt = p.y; if (p.y > top) top = p.y; const l = Math.abs(p[lat]); if (l > gLat) gLat = l;
+  });
+  if (!isFinite(door)) door = uMin + len * 0.62;
+  if (!isFinite(belt)) { belt = H * 0.62; top = H * 0.95; gLat = 0.8; }
+  return {
+    axisX: ax === "x" ? 1 : 0, front: fs,
+    partial: uMax - Math.min(0.85, len * 0.2),         // bumper + roughly the first 50–60cm of hood and fenders
+    door: door - 0.03,
+    rocker: (isFinite(sill) ? sill : 0.2) + 0.17,       // sills and the lower doors
+    belt, roof: top - 0.02, mirror: gLat + 0.11, hood: gLat * 0.9,
+  };
+}
+function applyPPF() {
+  const cfg = state.ppf, f = state.ppfFrame;
+  if (!cfg || !f || !PPF_MODES[cfg.coverage]) { ppfU.ppfMode.value = 0; return; }
+  const fin = PPF_FINISH[cfg.finish] || PPF_FINISH.gloss;
+  ppfU.ppfMode.value = PPF_MODES[cfg.coverage];
+  ppfU.ppfA.value.set(f.axisX, f.front, f.partial, f.door);
+  ppfU.ppfB.value.set(f.rocker, f.belt, f.roof, f.mirror);
+  ppfU.ppfC2.value.set(f.hood, 0, 0, 0);
+  ppfU.ppfFin.value.set(fin.rough, fin.metal, fin.cc, fin.ccr);
+  if (fin.color != null) { const c = new THREE.Color(fin.color); ppfU.ppfCol.value.set(c.r, c.g, c.b, 1); } else ppfU.ppfCol.value.w = 0;
+  ppfU.ppfPattern.value = fin.pattern ? 1 : 0;
+  if (cfg.accent) ppfU.ppfAccent.value.set(cfg.accent);
+}
+// A coverage change flashes the covered area in the accent colour, then
+// settles: clear films keep a light wash + a crisp edge line (they are
+// invisible by design — the wash IS the visualisation); colour films need none.
+let _ppfAnim = 0;
+function pulsePPF() {
+  const cfg = state.ppf;
+  const fin = (cfg && PPF_FINISH[cfg.finish]) || PPF_FINISH.gloss;
+  const rest = cfg ? fin.rest : 0, edge = cfg ? (fin.color != null ? 0 : 0.85) : 0;
+  const from = cfg ? Math.max(0.62, rest) : 0, t0 = performance.now(), gen = ++_ppfAnim;
+  const tick = (now) => {
+    if (gen !== _ppfAnim) return;
+    const k = Math.min(1, (now - t0) / 1100), e = 1 - Math.pow(1 - k, 3);
+    ppfU.ppfHL.value = from + (rest - from) * e;
+    ppfU.ppfEdge.value = edge;
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  setTimeout(() => { if (gen === _ppfAnim) { ppfU.ppfHL.value = rest; ppfU.ppfEdge.value = edge; } }, 1300); // rAF can be throttled
 }
 
 // Grounding: a contact shadow baked from the car's own shape (depth from
@@ -1345,11 +1526,12 @@ function loadCar(cfg) {
     state.scene.add(root);
     state.renderer.shadowMap.needsUpdate = true; // new shadow caster in the scene
     Object.assign(state, {
-      carRoot: root, bodyMats: prep.bodyMats, cabinMats: prep.cabinMats || [],
+      carRoot: root, bodyMats: prep.bodyMats, cabinMats: prep.cabinMats || [], ppfFrame: prep.ppfFrame || null,
       zoneMats: prep.zoneMats, zoneMeshes: prep.zoneMeshes,
     });
     state.carReady = true;
     applyCabin(); // the new car's interior takes the current studio + tint light
+    applyPPF();   // ...and its film edges are re-measured for this body
     setTimeout(preloadEnvironments, 1200); // warm all HDRIs so picker swaps don't stall
     if (prep.building) {
       state.buildingPrep = prep;
@@ -2036,6 +2218,15 @@ window.VIEWER3D = {
     if (cfg) loadCar(cfg);
   },
   setPaint(hex) { state.bodyMats.forEach((m) => m.color.set(hex)); },
+  // Paint protection film: null = bare paint, else
+  // { coverage: partial|front|track|vehicle|accents, finish: gloss|matte|blak|matteblak|gunmetal|carbon, accent }
+  setPPF(cfg, quiet) {
+    state.ppf = cfg || null;
+    applyPPF();
+    if (quiet) { const fin = (cfg && PPF_FINISH[cfg.finish]) || PPF_FINISH.gloss; ppfU.ppfHL.value = cfg ? fin.rest : 0; ppfU.ppfEdge.value = cfg && fin.color == null ? 0.85 : 0; _ppfAnim++; }
+    else pulsePPF();
+  },
+  get ppfFinishes() { return Object.keys(PPF_FINISH); },
   // vlts: {windshield, front, rear, back} — null/undefined = factory glass
   setTint(vlts) {
     if (!state.zoneMats) return;

@@ -84,6 +84,8 @@
     comparing: false,
     space: "vehicles",               // vehicles | residential | commercial
     env: "gray",                     // 3D studio environment (viewer3d ENVIRONMENTS)
+    mode: "tint",                    // tint | ppf (paint protection film — vehicles, 3D, brands with a PPF line)
+    ppf: { film: 0, coverage: "front" },
     b: {                             // per-space architectural film selection
       residential: { series: 0, shade: null, view: "exterior" },
       commercial: { series: 0, shade: null, view: "exterior" },
@@ -139,6 +141,7 @@
     renderVehicle();
     renderZoneBar();
     renderShades();
+    renderMode(); // the PPF simulator needs the 3D car
   }
   document.addEventListener("viewer3d-unavailable", (e) => {
     if (e.detail && e.detail.building) return; // diorama failed; the car showroom is fine
@@ -331,6 +334,7 @@
       cr.style.display = txt ? "" : "none";
     }
     applyTint();
+    applyPPFView(true);
   });
 
   // click (not drag) on the canvas selects the glass zone under the pointer
@@ -345,6 +349,7 @@
       const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
       downAt = null;
       if (moved > 10 || !window.VIEWER3D || !window.VIEWER3D.carReady) return;
+      if (ppfOn()) return; // window picking belongs to tint mode
       const zone = window.VIEWER3D.pickZone(e.clientX, e.clientY);
       if (!zone) return;
       S.zoneMode = zone;
@@ -395,12 +400,120 @@
         : "Bare glass — pick a film";
       return;
     }
+    if (ppfOn()) {
+      el.textContent = S.comparing ? "Bare paint (comparing)" : `${ppfFilm().name} · ${PPF_COVER[S.ppf.coverage].name}`;
+      return;
+    }
     if (S.comparing) { el.textContent = "Factory glass (comparing)"; return; }
     const abbr = { windshield: "WS", front: "F", rear: "R", back: "B" };
     const parts = ZONES.filter((z) => S.shades[z])
       .map((z) => `${abbr[z]} ${S.shades[z].sku ?? S.shades[z].vlt}%`);
     el.textContent = parts.length ? parts.join(" · ") : "Factory glass — pick a shade";
   }
+
+  // ---------- paint protection film (PPF simulator) ----------
+  // A second mode beside window tint: pick a film and a coverage package and
+  // the 3D car shows exactly what is covered — clear films as a light wash
+  // with a crisp film-edge line, matte and color films as the finish itself.
+  const PPF_COVER = {
+    partial: { name: "Partial Front", desc: "Front bumper, the leading edge of the hood and fenders, and the mirror caps." },
+    front: { name: "Full Front", desc: "The entire hood and fenders, front bumper and mirror caps." },
+    track: { name: "Track Pack", desc: "Full front plus the rocker panels and lower doors, where the tires throw debris." },
+    vehicle: { name: "Full Vehicle", desc: "Every painted panel, nose to tail." },
+    accents: { name: "Hood, Roof & Mirrors", desc: "Accent panels in the film's own finish." },
+  };
+  const PPF_COLOR = ["blak", "matteblak", "gunmetal", "carbon"];
+  function ppfOn() { return S.mode === "ppf" && S.space === "vehicles" && MODE_3D && !!BRAND.ppf; }
+  function ppfFilm() { return BRAND.ppf.films[S.ppf.film] || BRAND.ppf.films[0]; }
+  function ppfCoverList() { return PPF_COLOR.includes(ppfFilm().finish) ? ["accents", "vehicle"] : ["partial", "front", "track", "vehicle"]; }
+
+  function applyPPFView(quiet) {
+    if (!MODE_3D || !window.VIEWER3D || !window.VIEWER3D.setPPF || !window.VIEWER3D.carReady) return;
+    const on = ppfOn() && !S.comparing;
+    window.VIEWER3D.setPPF(on ? { coverage: S.ppf.coverage, finish: ppfFilm().finish, accent: BRAND.ppf.accent } : null, quiet);
+  }
+
+  function renderPPF() {
+    if (!BRAND.ppf) return;
+    const film = ppfFilm();
+    const list = ppfCoverList();
+    if (!list.includes(S.ppf.coverage)) S.ppf.coverage = list.includes("front") ? "front" : "vehicle";
+    const tabs = $("ppfTabs");
+    const refocus = keepFocus(tabs);
+    tabs.innerHTML = BRAND.ppf.films.map((f, i) =>
+      `<button class="series-tab ${i === S.ppf.film ? "active" : ""}" aria-pressed="${i === S.ppf.film}" data-i="${i}">${f.name}</button>`).join("");
+    tabs.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        S.ppf.film = +b.dataset.i;
+        renderPPF();
+        applyPPFView();
+        renderBadge();
+        track("viz_ppf", ppfFilm().name + " | " + S.ppf.coverage);
+      }));
+    refocus();
+    $("ppfDesc").textContent = film.tagline || "";
+    $("ppfKind").textContent = film.kind || "";
+    $("ppfKind").style.display = film.kind ? "inline-block" : "none";
+    const cov = $("ppfCover");
+    const refocusC = keepFocus(cov);
+    cov.innerHTML = list.map((id) =>
+      `<button type="button" class="${id === S.ppf.coverage ? "active" : ""}" aria-pressed="${id === S.ppf.coverage}" data-c="${id}">` +
+      `<b>${PPF_COVER[id].name}</b><span>${PPF_COVER[id].desc}</span></button>`).join("");
+    cov.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        S.ppf.coverage = b.dataset.c;
+        renderPPF();
+        applyPPFView();
+        renderBadge();
+        track("viz_ppf", ppfFilm().name + " | " + S.ppf.coverage);
+      }));
+    refocusC();
+    // a black film on black paint shows nothing — say so rather than look broken
+    const pc = parseInt((S.paint || "#000").slice(1), 16);
+    const lum = (0.299 * (pc >> 16 & 255) + 0.587 * (pc >> 8 & 255) + 0.114 * (pc & 255)) / 255;
+    const lowContrast = ["blak", "matteblak", "carbon"].includes(film.finish) && lum < 0.2;
+    $("ppfCoverNote").textContent = PPF_COLOR.includes(film.finish)
+      ? "Color films change the look of every panel they cover." + (lowContrast ? " Pick a lighter paint color to see the contrast." : "")
+      : film.finish === "matte"
+        ? "Matte film turns covered panels satin — the highlighted area shows where."
+        : "Clear film is invisible once installed — the highlighted area and edge line show what is covered.";
+    $("ppfSpecs").innerHTML = (film.specs || []).map(([v, l]) =>
+      `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
+    $("ppfNote").textContent = film.note || "";
+  }
+
+  // the Tint | Paint Protection switch (hidden where there is nothing to switch to)
+  function renderMode() {
+    const sw = $("modeSwitch");
+    if (!sw) return;
+    const can = !!BRAND.ppf && MODE_3D && S.space === "vehicles";
+    sw.hidden = !can;
+    const ppf = ppfOn();
+    document.body.classList.toggle("mode-ppf", ppf);
+    sw.querySelectorAll("button").forEach((b) => {
+      const on = (b.dataset.m === "ppf") === ppf;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on);
+    });
+    const hint = $("stageHint");
+    if (hint && S.space === "vehicles" && MODE_3D) hint.textContent = ppf ? "Drag to rotate" : "Drag to rotate · Click a window to select it";
+    const hold = $("holdCompare");
+    if (hold && S.space === "vehicles") {
+      hold.textContent = ppf ? "Hold: bare paint" : "Hold: factory glass";
+      hold.title = ppf ? "Press and hold to see the car without film" : "Press and hold to see factory glass";
+    }
+  }
+  function setMode(m) {
+    if (m === S.mode) return;
+    S.mode = m;
+    track("viz_mode", m);
+    renderMode();
+    renderPPF();
+    applyPPFView();
+    renderBadge();
+  }
+  if ($("modeSwitch")) $("modeSwitch").querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => setMode(b.dataset.m)));
 
   // ---------- space switcher ----------
   function enterSpace(space) {
@@ -433,6 +546,7 @@
     renderSeries();
     renderShades();
     renderSpecs();
+    renderMode();
   }
 
   function renderSpaceTabs() {
@@ -528,6 +642,7 @@
       s.addEventListener("click", () => {
         S.paint = s.dataset.c;
         renderStageTools();
+        if (ppfOn()) renderPPF();
         if (MODE_3D) { if (window.VIEWER3D) window.VIEWER3D.setPaint(S.paint); }
         else if (!PHOTO_MODE) $("stage").querySelector("svg").style.setProperty("--paint", S.paint);
       }));
@@ -554,7 +669,7 @@
   }
 
   const hold = $("holdCompare");
-  const setCompare = (on) => { S.comparing = on; applyTint(); };
+  const setCompare = (on) => { S.comparing = on; applyTint(); applyPPFView(true); };
   ["mousedown", "touchstart"].forEach((e) => hold.addEventListener(e, (ev) => { ev.preventDefault(); setCompare(true); }));
   ["mouseup", "mouseleave", "touchend", "touchcancel", "blur"].forEach((e) => hold.addEventListener(e, () => setCompare(false)));
   hold.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); setCompare(true); } });
@@ -980,6 +1095,10 @@
   renderSpecs();
   renderLawSelect();
   renderLaw();
+  // ?mode=ppf deep-links straight into the PPF simulator (brands with a PPF line)
+  if ((qs.get("mode") || "").toLowerCase() === "ppf" && BRAND.ppf) S.mode = "ppf";
+  renderPPF();
+  renderMode();
 
   // Hüper and Edge are architectural-film brands first, so they land on the
   // building scenes; Autobahn has no flat-glass catalog and stays on vehicles.
@@ -988,6 +1107,7 @@
   // boot); the queued vehicle boot bails once S.space has moved, so no car loads.
   const SPACES = ["vehicles", "residential", "commercial"];
   const askedSpace = (qs.get("space") || "").toLowerCase();
-  const bootSpace = SPACES.includes(askedSpace) ? askedSpace : (BCAT ? "residential" : "vehicles");
+  const bootSpace = SPACES.includes(askedSpace) ? askedSpace
+    : (S.mode === "ppf" ? "vehicles" : (BCAT ? "residential" : "vehicles")); // PPF lives on the car
   if (bootSpace !== "vehicles" && BCAT && BSCENES[bootSpace]) enterSpace(bootSpace);
 })();
