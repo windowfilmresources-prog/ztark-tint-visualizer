@@ -466,8 +466,10 @@ html.embed .panel .card { padding: 16px 18px; }
 html.embed .mode-switch { position: sticky; top: 0; z-index: 3; margin-bottom: 0; flex: none;
   box-shadow: 0 10px 16px -10px rgba(0, 0, 0, .45); }
 html.embed .panel footer { max-width: none; padding: 2px 2px 6px; }
-/* a narrow stage has no room for the hint beside the model credit */
+/* a narrow stage has no room for the hint beside the model credit, and a
+   narrow control column has no room for four spec tiles in a row */
 @media (max-width: 999px) { html.embed .stage-hint { display: none; } }
+@media (min-width: 760px) and (max-width: 1099px) { html.embed .specs { grid-template-columns: repeat(2, 1fr); } }
 
 /* narrow frames (phones): one column that scrolls, with the car pinned on top */
 @media (max-width: 759px) {
