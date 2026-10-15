@@ -1767,6 +1767,14 @@ function mount(container) {
   controls.maxDistance = 10;
   controls.enablePan = false;
   renderer.domElement.style.touchAction = "pan-y";
+  // The stage usually sits inside a brand page: a plain wheel / two-finger
+  // swipe over the car must scroll the page, not zoom the car (in a tall
+  // iframe that trapped visitors). Pinch (ctrlKey) or Cmd/Ctrl + wheel zooms;
+  // touch pinch is unaffected. Capture runs before OrbitControls' handler.
+  renderer.domElement.addEventListener("wheel", (e) => { controls.enableZoom = e.ctrlKey || e.metaKey; },
+    { capture: true, passive: true });
+  renderer.domElement.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") controls.enableZoom = true; },
+    { capture: true, passive: true });
 
   Object.assign(state, { renderer, scene, camera, controls });
   applyEnvironment(state.envId || "gray");  // designed studio set (HDRI + rig)
