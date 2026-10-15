@@ -1142,14 +1142,19 @@ function applyFinishes(root, cfg, bodyMats) {
 // from the car's own geometry (measureForPPF), never hard-coded per model.
 const PPF_MODES = { partial: 1, front: 2, track: 3, vehicle: 4, accents: 5 };
 const PPF_FINISH = {
-  // rough / metal < 0 = keep the paint's own; cc = clear-coat amount, ccr = its roughness
-  gloss:     { rough: -1, metal: -1, cc: 1.0, ccr: 0.03, color: null, rest: 0.13 },
-  matte:     { rough: 0.6, metal: -1, cc: 0.14, ccr: 0.55, color: null, rest: 0.1 },
-  blak:      { rough: 0.3, metal: 0.0, cc: 1.0, ccr: 0.03, color: 0x040405, rest: 0 },
-  matteblak: { rough: 0.72, metal: 0.0, cc: 0.08, ccr: 0.6, color: 0x0b0b0c, rest: 0 },
-  gunmetal:  { rough: 0.5, metal: 0.55, cc: 0.2, ccr: 0.45, color: 0x3c4044, rest: 0 },
-  carbon:    { rough: 0.34, metal: 0.15, cc: 1.0, ccr: 0.04, color: 0x0e0e0f, rest: 0, pattern: 1 },
+  // rough / metal < 0 = keep the paint's own; cc = clear-coat amount, ccr = its roughness;
+  // spec = base-coat specular scale (< 0 keeps the paint's): colour films carry their
+  // gloss in the top coat — a white base sheen turned piano black into dark gray.
+  // rest = coverage wash left on after the selection flash: none — the car shows
+  // what it will really look like (clear film is invisible; hold-to-highlight shows it)
+  gloss:     { rough: -1, metal: -1, cc: 1.0, ccr: 0.03, spec: -1, color: null, rest: 0 },
+  matte:     { rough: 0.6, metal: -1, cc: 0.14, ccr: 0.55, spec: -1, color: null, rest: 0 },
+  blak:      { rough: 0.12, metal: 0.0, cc: 1.0, ccr: 0.03, spec: 0, color: 0x030304, rest: 0 },
+  matteblak: { rough: 0.72, metal: 0.0, cc: 0.08, ccr: 0.6, spec: 0.35, color: 0x0b0b0c, rest: 0 },
+  gunmetal:  { rough: 0.5, metal: 0.3, cc: 0.12, ccr: 0.5, spec: 0.6, color: 0x50555b, rest: 0 },
+  carbon:    { rough: 0.34, metal: 0.15, cc: 1.0, ccr: 0.04, spec: 0.2, color: 0x0e0e0f, rest: 0, pattern: 1 },
 };
+const PPF_HIGHLIGHT = 0.55; // coverage wash while "show coverage" is held
 const ppfU = {
   ppfMode: { value: 0 },
   ppfA: { value: new THREE.Vector4(0, 1, 1.4, 0.6) },       // axis is x?, front sign, partial edge, door edge
@@ -1160,7 +1165,7 @@ const ppfU = {
   ppfHL: { value: 0 },
   ppfEdge: { value: 0 },
   ppfPattern: { value: 0 },
-  ppfC2: { value: new THREE.Vector4(0.7, 0, 0, 0) },        // hood half-width
+  ppfC2: { value: new THREE.Vector4(0.7, -1, 0, 0) },       // hood half-width, base specular scale
 };
 const PPF_FRAG_HEAD = `
 varying vec3 vPpfP; varying vec3 vPpfN;
@@ -1221,12 +1226,12 @@ function installPPF(m) {
       .replace("#include <color_fragment>", "#include <color_fragment>\nppfCover();\nif (ppfCol.a > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, ppfFilmColor(), ppfC);")
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, ppfFin.x < 0.0 ? roughnessFactor : ppfFin.x, ppfC);")
       .replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, ppfFin.y < 0.0 ? metalnessFactor : ppfFin.y, ppfC);")
-      .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat = mix(material.clearcoat, ppfFin.z, ppfC);\nmaterial.clearcoatRoughness = mix(material.clearcoatRoughness, max(ppfFin.w, 0.0525), ppfC);\n#endif")
+      .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nif (ppfC2.y >= 0.0) material.specularColor *= mix(1.0, ppfC2.y, ppfC);\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat = mix(material.clearcoat, ppfFin.z, ppfC);\nmaterial.clearcoatRoughness = mix(material.clearcoatRoughness, max(ppfFin.w, 0.0525), ppfC);\n#endif")
       .replace("#include <opaque_fragment>", "#include <opaque_fragment>\n{ float pk = clamp(ppfC * ppfHL + ppfE * ppfEdge, 0.0, 0.9);\n" +
         // mix in display (gamma) space: a linear-light mix swamps dark paint — 11% read as a repaint
         "if (pk > 0.0) gl_FragColor.rgb = pow(mix(pow(max(gl_FragColor.rgb, 0.0), vec3(0.4545)), pow(ppfAccent, vec3(0.4545)), pk), vec3(2.2)); }");
   };
-  m.customProgramCacheKey = () => "ppf-v2";
+  m.customProgramCacheKey = () => "ppf-v3";
   m.needsUpdate = true;
 }
 // Where the film edges fall on THIS car, measured from its geometry (world
@@ -1283,7 +1288,7 @@ function applyPPF() {
   ppfU.ppfMode.value = PPF_MODES[cfg.coverage];
   ppfU.ppfA.value.set(f.axisX, f.front, f.partial, f.door);
   ppfU.ppfB.value.set(f.rocker, f.belt, f.roof, f.mirror);
-  ppfU.ppfC2.value.set(f.hood, 0, 0, 0);
+  ppfU.ppfC2.value.set(f.hood, fin.spec != null ? fin.spec : -1, 0, 0);
   ppfU.ppfFin.value.set(fin.rough, fin.metal, fin.cc, fin.ccr);
   if (fin.color != null) { const c = new THREE.Color(fin.color); ppfU.ppfCol.value.set(c.r, c.g, c.b, 1); } else ppfU.ppfCol.value.w = 0;
   ppfU.ppfPattern.value = fin.pattern ? 1 : 0;
@@ -2208,6 +2213,10 @@ function resize() {
     state.camera.left = -hh * aspect; state.camera.right = hh * aspect;
   } else {
     state.camera.aspect = aspect;
+    // shots are framed for a 16:9 stage; a taller one (the fitted iframe
+    // layout, phones) widens the view instead of cropping the car's ends
+    // (eased: a little of the extra height still goes to a closer car)
+    state.camera.zoom = Math.min(1, Math.pow(aspect / (16 / 9), 0.75));
   }
   state.camera.updateProjectionMatrix();
 }
@@ -2295,6 +2304,8 @@ window.VIEWER3D = {
   setPPF(cfg, quiet) {
     state.ppf = cfg || null;
     applyPPF();
+    // { highlight: true }: hold-to-show-coverage — a steady wash + edge line
+    if (cfg && cfg.highlight) { _ppfAnim++; ppfU.ppfHL.value = PPF_HIGHLIGHT; ppfU.ppfEdge.value = 0.85; return; }
     if (quiet) { const fin = (cfg && PPF_FINISH[cfg.finish]) || PPF_FINISH.gloss; ppfU.ppfHL.value = cfg ? fin.rest : 0; ppfU.ppfEdge.value = cfg && fin.color == null ? 0.85 : 0; _ppfAnim++; }
     else pulsePPF();
   },
@@ -2496,6 +2507,46 @@ window.VIEWER3D = {
     return out;
   },
   // QA: every car material with its look-defining properties + where it sits
+  // QA: the PPF frame + paint islands near the A-pillar base (mirror caps)
+  debugPPF() {
+    const f = state.ppfFrame;
+    if (!f || !state.carRoot) return null;
+    const ax = f.axisX ? "x" : "z", lat = f.axisX ? "z" : "x", fs = f.front;
+    const v = new THREE.Vector3(), out = [];
+    state.carRoot.updateMatrixWorld(true);
+    state.carRoot.traverse((o) => {
+      if (!o.isMesh) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      if (!ms.some((m) => state.bodyMats.includes(m))) return;
+      const g = o.geometry, pos = g.getAttribute("position"), idx = g.index;
+      if (!idx) return;
+      // union-find over welded positions
+      const key = new Map(), parent = new Int32Array(pos.count).map((_, i) => i);
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      for (let i = 0; i < pos.count; i++) {
+        const k = pos.getX(i).toFixed(5) + "," + pos.getY(i).toFixed(5) + "," + pos.getZ(i).toFixed(5);
+        const j = key.get(k); if (j === undefined) key.set(k, i); else parent[find(i)] = find(j);
+      }
+      for (let t = 0; t < idx.count; t += 3) {
+        const a = find(idx.getX(t)), b = find(idx.getX(t + 1)), c = find(idx.getX(t + 2));
+        parent[b] = a; parent[find(c)] = a;
+      }
+      const boxes = new Map();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        const r = find(i); let bx = boxes.get(r);
+        if (!bx) { bx = { n: 0, u0: 1e9, u1: -1e9, y0: 1e9, y1: -1e9, l0: 1e9, l1: -1e9 }; boxes.set(r, bx); }
+        const u = v[ax] * fs, l = Math.abs(v[lat]);
+        bx.n++; bx.u0 = Math.min(bx.u0, u); bx.u1 = Math.max(bx.u1, u); bx.y0 = Math.min(bx.y0, v.y); bx.y1 = Math.max(bx.y1, v.y); bx.l0 = Math.min(bx.l0, l); bx.l1 = Math.max(bx.l1, l);
+      }
+      boxes.forEach((b) => {
+        if (b.u1 < f.door - 1.0 || b.u0 > f.door + 0.6 || b.y1 < f.belt - 0.25 || b.y0 > f.belt + 0.5) return;
+        const r = (x) => +x.toFixed(3);
+        out.push({ mesh: o.name, n: b.n, u: [r(b.u0), r(b.u1)], y: [r(b.y0), r(b.y1)], lat: [r(b.l0), r(b.l1)] });
+      });
+    });
+    return { frame: f, islands: out.sort((a, b) => b.lat[1] - a.lat[1]).slice(0, 12) };
+  },
   debugMatInfo() {
     const out = new Map();
     if (!state.carRoot) return [];

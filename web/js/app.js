@@ -453,7 +453,8 @@
       return;
     }
     if (ppfOn()) {
-      el.textContent = S.comparing ? "Bare paint (comparing)" : `${ppfFilm().name} · ${PPF_COVER[S.ppf.coverage].name}`;
+      const label = `${ppfFilm().name} · ${PPF_COVER[S.ppf.coverage].name}`;
+      el.textContent = !S.comparing ? label : ppfIsColor() ? "Bare paint (comparing)" : `${label} · coverage shown`;
       return;
     }
     if (S.comparing) { el.textContent = "Factory glass (comparing)"; return; }
@@ -479,10 +480,23 @@
   function ppfFilm() { return BRAND.ppf.films[S.ppf.film] || BRAND.ppf.films[0]; }
   function ppfCoverList() { return PPF_COLOR.includes(ppfFilm().finish) ? ["accents", "vehicle"] : ["partial", "front", "track", "vehicle"]; }
 
+  // clear films are invisible once installed, so the car shows its real look and
+  // the hold button highlights what is covered; colour films hold to bare paint
+  function ppfIsColor() { return PPF_COLOR.includes(ppfFilm().finish); }
   function applyPPFView(quiet) {
     if (!MODE_3D || !window.VIEWER3D || !window.VIEWER3D.setPPF || !window.VIEWER3D.carReady) return;
-    const on = ppfOn() && !S.comparing;
-    window.VIEWER3D.setPPF(on ? { coverage: S.ppf.coverage, finish: ppfFilm().finish, accent: BRAND.ppf.accent } : null, quiet);
+    const color = ppfOn() && ppfIsColor();
+    const on = ppfOn() && !(S.comparing && color);
+    window.VIEWER3D.setPPF(on ? { coverage: S.ppf.coverage, finish: ppfFilm().finish, accent: BRAND.ppf.accent,
+      highlight: S.comparing && !color } : null, quiet);
+  }
+  function renderHold() {
+    const hold = $("holdCompare");
+    if (!hold || S.space !== "vehicles") return;
+    const ppf = ppfOn(), color = ppf && ppfIsColor();
+    hold.textContent = !ppf ? "Hold: factory glass" : color ? "Hold: bare paint" : "Hold: show coverage";
+    hold.title = !ppf ? "Press and hold to see factory glass"
+      : color ? "Press and hold to see the car without film" : "Press and hold to highlight where the film goes";
   }
 
   function renderPPF() {
@@ -527,11 +541,12 @@
     $("ppfCoverNote").textContent = PPF_COLOR.includes(film.finish)
       ? "Color films change the look of every panel they cover." + (lowContrast ? " Pick a lighter paint color to see the contrast." : "")
       : film.finish === "matte"
-        ? "Matte film turns covered panels satin — the highlighted area shows where."
-        : "Clear film is invisible once installed — the highlighted area and edge line show what is covered.";
+        ? "Clear matte film turns the covered paint satin — same color, no shine. Hold “Show coverage” to see exactly where it goes."
+        : "Clear film is invisible once installed — the thin line marks the film edge. Hold “Show coverage” to see exactly what is covered.";
     $("ppfSpecs").innerHTML = (film.specs || []).map(([v, l]) =>
       `<div class="spec"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("");
     $("ppfNote").textContent = film.note || "";
+    renderHold();
   }
 
   // the Tint | Paint Protection switch (hidden where there is nothing to switch to)
@@ -549,11 +564,7 @@
     });
     const hint = $("stageHint");
     if (hint && S.space === "vehicles" && MODE_3D) hint.textContent = ppf ? "Drag to rotate" : "Drag to rotate · Click a window to select it";
-    const hold = $("holdCompare");
-    if (hold && S.space === "vehicles") {
-      hold.textContent = ppf ? "Hold: bare paint" : "Hold: factory glass";
-      hold.title = ppf ? "Press and hold to see the car without film" : "Press and hold to see factory glass";
-    }
+    renderHold();
   }
   function setMode(m) {
     if (m === S.mode) return;
@@ -1125,6 +1136,9 @@
   const BUILDING_DISCLAIMER =
     "Visual renderings are concept illustrations for demonstration only — not your building. Actual film appearance and performance vary with glass type, orientation, and installation; confirm specifications with your dealer.";
   $("disclaimer").textContent = VEHICLE_DISCLAIMER;
+  // embedded: the page itself doesn't scroll, so the fine print rides at the
+  // end of the control column instead of below it
+  if (document.documentElement.classList.contains("embed")) document.querySelector(".panel").appendChild($("disclaimer"));
 
   // ---------- boot ----------
   const def = BRAND.defaultShade; // {seriesIdx, vlt, sku} optional

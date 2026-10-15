@@ -8,7 +8,17 @@
        without revalidating, and a mixed old/new set breaks the page silently.
        (Keep this comment free of literal rel numbers: greps for the live version
        must match the script tags only.) -->
-  <link rel="stylesheet" href="css/app.css?rel=75">
+  <script>
+    // Iframed on a brand site the host page already brands and introduces the
+    // tool and the frame has a fixed height: switch to the fitted app layout
+    // (css "embedded") before first paint. ?embed=1 forces it, ?embed=0 opts out.
+    (function () {
+      var q = new URLSearchParams(location.search).get("embed"), framed;
+      try { framed = window.self !== window.top; } catch (e) { framed = true; }
+      if (q === "1" || (framed && q !== "0")) document.documentElement.classList.add("embed");
+    })();
+  </script>
+  <link rel="stylesheet" href="css/app.css?rel=76">
 </head>
 <body>
   <header>
@@ -171,7 +181,7 @@
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
   </script>
-  <script type="module" src="js/viewer3d.js?rel=82"></script>
+  <script type="module" src="js/viewer3d.js?rel=83"></script>
   <script src="js/vehicles.js?rel=62"></script>
   <script src="js/photocars.js?rel=62"></script>
   <script src="js/tintlaws.js?rel=62"></script>
@@ -181,6 +191,6 @@
   <script src="js/brands.js?rel=69"></script>
   <script src="js/intro.js?rel=77"></script>
   <script src="js/savings.js?rel=62"></script>
-  <script src="js/app.js?rel=79"></script>
+  <script src="js/app.js?rel=80"></script>
 </body>
 </html>
