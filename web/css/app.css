@@ -454,6 +454,7 @@ html.embed .stage-wrap {
   position: static; height: 100%; min-height: 0; padding: 12px;
   display: flex; flex-direction: column;
 }
+html.embed .stage-frame { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 html.embed .stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 html.embed #viewer3d, html.embed #photoviz, html.embed .bstage { flex: 1 1 auto; aspect-ratio: auto; min-height: 0; }
 html.embed .stage-tools { flex: none; margin-top: 10px; gap: 10px 14px; }
@@ -479,11 +480,9 @@ html.embed .panel footer { max-width: none; padding: 2px 2px 6px; }
    it when the content has to scroll. */
 html.embed.embed-stack main { display: block; overflow-y: auto; padding: 10px; }
 html.embed.embed-stack .stage-wrap { display: contents; }
-html.embed.embed-stack .stage {
-  height: var(--stage-h, 56.25vw); border-radius: var(--radius, 10px);
-  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5);
-}
-html.embed.embed-stack .stage.pin { position: sticky; top: 0; z-index: 6; }
+html.embed.embed-stack .stage-frame { height: var(--stage-h, 56.25vw); }
+html.embed.embed-stack .stage { border-radius: var(--radius, 10px); box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5); }
+html.embed.embed-stack .stage-frame.pin { position: sticky; top: 0; z-index: 6; }
 html.embed.embed-stack .stage-tools {
   margin: 10px 0 12px; padding: 12px 14px; background: var(--panel-bg, #fff);
   border-radius: var(--radius, 10px); border: 1px solid var(--card-border, transparent);
@@ -498,5 +497,113 @@ html.embed.embed-stack .panel > footer { grid-column: 1 / -1; }
 html.embed.embed-stack .mode-switch { position: static; box-shadow: none; margin: 0; }
 html.embed.embed-stack .specs { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 560px) { html.embed.embed-stack .specs { grid-template-columns: repeat(2, 1fr); } }
-}
 
+/* ---------- on-render controls (HUD) ----------
+   When the stage is wide enough, the controls you use while watching the car
+   (vehicle, paint, studio, Tint|PPF, windows + shades / coverage, compare)
+   float on the render as glass panels in the brand's own panel colours
+   (app.js sets --hud-*); the side column keeps the reading: film details,
+   performance, legal, savings, dealer. */
+.stage-frame { position: relative; }
+.hud {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  font-family: var(--body-font);
+}
+.hud[hidden] { display: none; }
+.hud > * { pointer-events: auto; }
+.hud .glass {
+  background: var(--hud-bg, rgba(16, 17, 19, .66)); color: var(--hud-text, #f2f3f5);
+  border: 1px solid var(--hud-line, rgba(255, 255, 255, .14));
+  -webkit-backdrop-filter: blur(14px) saturate(1.25); backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow: 0 12px 28px -14px rgba(0, 0, 0, .55);
+}
+.hud-top { position: absolute; top: 12px; left: 12px; border-radius: 999px; padding: 4px; }
+.hud-top:empty { display: none; }
+.hud-mode { position: absolute; top: 12px; right: 12px; }
+.hud-rail {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 10px 7px; border-radius: 999px;
+}
+.hud-dock {
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 140px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 10px 12px 9px; border-radius: 16px;
+}
+.hud-dock-row, .hud-dock-foot { max-width: 100%; }
+.hud-dock-row:empty, .hud-dock-foot:empty { display: none; }
+
+/* controls restyled for the glass */
+#hud .veh-btn, #hud .zone-tab, #hud .shade-chip, #hud .ppf-cover button, #hud .toggle-btn {
+  color: var(--hud-text, #f2f3f5); border-color: transparent; background: transparent;
+}
+#hud #vehTabs { display: flex; gap: 2px; }
+#hud #vehTabs .veh-btn { border: 0; padding: 6px 15px; font-size: 12px; border-radius: 999px; }
+#hud #vehTabs .veh-btn.active, #hud .zone-tab.active, #hud .ppf-cover button.active {
+  background: var(--accent); color: var(--accent-text, #fff); border-color: var(--accent);
+}
+#hud .mode-switch {
+  position: static; margin: 0; box-shadow: 0 12px 28px -14px rgba(0, 0, 0, .55);
+  border-radius: 999px; background: var(--hud-bg, rgba(16, 17, 19, .66));
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+#hud .mode-switch button { padding: 7px 14px; font-size: 11px; color: var(--hud-text, #f2f3f5); }
+#hud .mode-switch button.active { color: var(--accent-text, #fff); }
+#hud #paints { display: flex; flex-direction: column; gap: 8px; }
+#hud .swatch { width: 22px; height: 22px; border-color: rgba(255, 255, 255, .35); }
+#hud .swatch.active { outline-width: 2px; }
+.hud-studio { position: relative; }
+.hud-studio-btn {
+  width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: pointer; display: grid; place-items: center;
+  border: 1.5px solid var(--hud-line, rgba(255, 255, 255, .3)); background: transparent;
+}
+.hud-studio-btn .env-dot { width: 14px; height: 14px; }
+.hud-studio-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hud-studio-menu {
+  position: absolute; right: calc(100% + 14px); bottom: -10px;
+  padding: 10px; border-radius: 12px; min-width: 190px;
+}
+.hud-studio-menu[hidden] { display: none; }
+.hud-menu-title { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--hud-muted, rgba(242, 243, 245, .6)); margin: 0 4px 6px; }
+#hud #envTabs { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+#hud #envTabs .veh-btn { border: 0; text-align: left; padding: 7px 10px; font-size: 12.5px; border-radius: 8px; }
+#hud #envTabs .veh-btn:hover { background: rgba(127, 127, 127, .16); }
+#hud #envTabs .veh-btn.active { background: var(--accent); color: var(--accent-text, #fff); }
+
+#hud .zone-bar { display: flex; gap: 3px; margin: 0; }
+#hud .zone-tab {
+  flex-direction: row; align-items: baseline; gap: 6px; padding: 5px 11px; font-size: 11.5px;
+  border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+}
+#hud .zone-tab:hover { border-color: var(--hud-line, rgba(255, 255, 255, .25)); }
+#hud .zone-mini { font-size: 11px; }
+#hud .shade-chips { flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+#hud .shade-chip { width: 46px; padding: 4px 0 3px; border-radius: 10px; border: 1px solid transparent; }
+#hud .shade-chip .dot { width: 24px; height: 24px; margin-bottom: 3px; border-color: rgba(255, 255, 255, .3); }
+#hud .shade-chip .pct { font-size: 11.5px; }
+#hud .shade-chip .sub { display: none; }
+#hud .shade-chip:hover { border-color: var(--hud-line, rgba(255, 255, 255, .25)); }
+#hud .shade-chip.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: rgba(127, 127, 127, .14); }
+#hud .ppf-cover { display: flex; gap: 3px; margin: 0; grid-template-columns: none; }
+#hud .ppf-cover button { padding: 7px 13px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+#hud .ppf-cover button span { display: none; }
+#hud .ppf-cover button b { font-size: 11.5px; font-weight: 600; }
+#hud #holdCompare {
+  font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 10px;
+  border: 0; color: var(--hud-muted, rgba(242, 243, 245, .6)); background: transparent;
+}
+#hud #holdCompare:hover, #hud #holdCompare:active { color: var(--hud-text, #f2f3f5); }
+/* the stage's own chrome makes room: the model credit drops below the dock,
+   the drag hint goes (the zone buttons do its job) */
+body.hud-on .stage .stage-hint, body.hud-on .stage .badge-vlt { display: none; }
+/* outside a fitted frame the stage is a fixed shape: with the controls on it,
+   give the car the room the dock takes */
+html:not(.embed) body.hud-on #viewer3d { aspect-ratio: 16 / 11; }
+/* the dock shows what the side column's mode is about */
+body:not(.mode-ppf) #hud [data-slot="cover"],
+body.mode-ppf #hud [data-slot="zones"], body.mode-ppf #hud [data-slot="shades"] { display: none; }
+body.hud-on .stage .photo-credit { left: 50%; right: auto; bottom: 5px; transform: translateX(-50%); background: none; padding: 0; white-space: nowrap; }
+body.hud-on .stage.cine ~ .hud { opacity: 0; pointer-events: none; }
+.hud { transition: opacity .5s ease; }
+.hud-emptied { display: none !important; }
+.hud-note { margin: 10px 0 0; min-height: 0; }

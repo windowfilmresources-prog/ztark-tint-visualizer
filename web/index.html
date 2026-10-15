@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/app.css?rel=78">
+  <link rel="stylesheet" href="css/app.css?rel=80">
 </head>
 <body>
   <header>
@@ -43,7 +43,33 @@
   <main>
     <!-- stage -->
     <section class="stage-wrap">
-      <div class="stage" id="stage"></div>
+      <div class="stage-frame" id="stageFrame">
+        <div class="stage" id="stage"></div>
+        <!-- on-render controls: app.js syncHud() moves the live controls in
+             here when the stage is wide enough, and back out when it isn't -->
+        <div class="hud" id="hud" hidden>
+          <div class="hud-top glass" data-slot="vehicles"></div>
+          <div class="hud-mode" data-slot="mode"></div>
+          <div class="hud-rail glass">
+            <div data-slot="paints"></div>
+            <div class="hud-studio">
+              <button type="button" class="hud-studio-btn" id="hudStudioBtn" aria-expanded="false" aria-haspopup="true" title="Studio">
+                <span class="env-dot" id="hudStudioDot"></span>
+              </button>
+              <div class="hud-studio-menu glass" id="hudStudioMenu" hidden>
+                <div class="hud-menu-title">Studio</div>
+                <div data-slot="studio"></div>
+              </div>
+            </div>
+          </div>
+          <div class="hud-dock glass">
+            <div class="hud-dock-row" data-slot="zones"></div>
+            <div class="hud-dock-row" data-slot="shades"></div>
+            <div class="hud-dock-row" data-slot="cover"></div>
+            <div class="hud-dock-foot" data-slot="hold"></div>
+          </div>
+        </div>
+      </div>
       <div class="stage-tools">
         <div class="group"><span class="group-label">Vehicle</span><span id="vehTabs" class="group"></span></div>
         <div class="group"><span class="group-label">Paint</span><span id="paints" class="group"></span></div>
@@ -187,7 +213,7 @@
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
   </script>
-  <script type="module" src="js/viewer3d.js?rel=84"></script>
+  <script type="module" src="js/viewer3d.js?rel=85"></script>
   <script src="js/vehicles.js?rel=62"></script>
   <script src="js/photocars.js?rel=62"></script>
   <script src="js/tintlaws.js?rel=62"></script>
@@ -197,6 +223,6 @@
   <script src="js/brands.js?rel=69"></script>
   <script src="js/intro.js?rel=78"></script>
   <script src="js/savings.js?rel=62"></script>
-  <script src="js/app.js?rel=81"></script>
+  <script src="js/app.js?rel=82"></script>
 </body>
 </html>

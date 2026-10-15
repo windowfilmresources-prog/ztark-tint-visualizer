@@ -2225,6 +2225,9 @@ function resize() {
     // layout, phones) widens the view instead of cropping the car's ends
     // (eased: a little of the extra height still goes to a closer car)
     state.camera.zoom = Math.min(1, Math.pow(aspect / (16 / 9), 0.75));
+    // on-render controls: the dock covers the floor, so the shot rides higher
+    if (state.viewShift || state.viewShiftX) state.camera.setViewOffset(w, h, state.viewShiftX || 0, state.viewShift || 0, w, h);
+    else if (state.camera.view) state.camera.clearViewOffset();
   }
   state.camera.updateProjectionMatrix();
 }
@@ -2301,6 +2304,11 @@ window.VIEWER3D = {
     } else if (state.envId !== id) applyEnvironment(id);
   },
   get carReady() { return state.carReady; },
+  // px the car is raised in frame (room for the on-render control dock)
+  setViewShift(up, left) {
+    if ((state.viewShift || 0) === (up || 0) && (state.viewShiftX || 0) === (left || 0)) return;
+    state.viewShift = up || 0; state.viewShiftX = left || 0; resize();
+  },
   hiddenCars: HIDDEN_CARS,
   loadCar(idOrCfg) {
     const cfg = typeof idOrCfg === "string" ? (FLEET.find((f) => f.id === idOrCfg) || HIDDEN_CARS[idOrCfg]) : idOrCfg;

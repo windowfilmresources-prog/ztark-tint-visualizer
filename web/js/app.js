@@ -37,6 +37,17 @@
   // ---------- theme ----------
   const root = document.documentElement;
   Object.entries(BRAND.theme).forEach(([k, v]) => root.style.setProperty(k, v));
+  // on-render controls are glass panels in the brand's own panel colours
+  (function hudTheme() {
+    const rgb = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim()); if (!m) return null;
+      const n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+    const bg = rgb(BRAND.theme["--panel-bg"]) || [255, 255, 255], tx = rgb(BRAND.theme["--panel-text"]) || [40, 40, 40];
+    const dark = bg[0] + bg[1] + bg[2] < 300;
+    root.style.setProperty("--hud-bg", `rgba(${bg.join(",")},${dark ? 0.68 : 0.78})`);
+    root.style.setProperty("--hud-text", `rgb(${(dark ? tx : tx.map((c) => Math.max(0, c - 40))).join(",")})`);
+    root.style.setProperty("--hud-muted", `rgba(${tx.join(",")},.62)`);
+    root.style.setProperty("--hud-line", `rgba(${tx.join(",")},.18)`);
+  })();
   window.PLATE_STYLE = BRAND.plate || null; // branded license plates in the 3D viewer
   (BRAND.fontLinks || []).forEach((href) => {
     const l = document.createElement("link");
@@ -565,6 +576,7 @@
     const hint = $("stageHint");
     if (hint && S.space === "vehicles" && MODE_3D) hint.textContent = ppf ? "Drag to rotate" : "Drag to rotate · Click a window to select it";
     renderHold();
+    if (hudOn) requestAnimationFrame(hudDecor); // the dock changes height with the mode
   }
   function setMode(m) {
     if (m === S.mode) return;
@@ -677,6 +689,7 @@
     if ($("envTabs")) $("envTabs").parentElement.style.display = building ? "none" : "";
     $("holdCompare").style.display = ""; // hold-to-compare works in every space
     renderViewTabs(building);
+    syncHud();
     if (building) return;
     const fleet = MODE_3D ? fleet3D() : FLEET2D;
     const tabs = $("vehTabs");
@@ -729,6 +742,7 @@
         }));
       refocusEnv();
     }
+    if (hudOn) hudDecor();
   }
 
   const hold = $("holdCompare");
@@ -1158,17 +1172,103 @@
     const root = document.documentElement, W = window.innerWidth, H = window.innerHeight;
     const stack = !(W >= 760 && H <= W * 1.1);
     root.classList.toggle("embed-stack", stack);
-    const stage = $("stage"), panel = document.querySelector(".panel");
+    const stage = $("stageFrame"), panel = document.querySelector(".panel");
     if (!stack) { root.style.removeProperty("--stage-h"); stage.classList.remove("pin"); return; }
     root.style.setProperty("--cols", W < 700 ? 1 : W < 1100 ? 2 : 3);
     const main = document.querySelector("main"), cs = getComputedStyle(main);
     const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const rest = panel.getBoundingClientRect().bottom - stage.getBoundingClientRect().bottom + pad;
-    const minH = Math.round(Math.min(W * 0.6, H * 0.5)), maxH = Math.round(Math.min(W * 0.78, H * 0.6));
+    // with the controls on the render the stage carries more of the tool: let it grow
+    const minH = Math.round(Math.min(W * 0.6, H * 0.5));
+    const maxH = Math.round(hudOn ? Math.min(W * 0.95, H * 0.64) : Math.min(W * 0.78, H * 0.6));
     const h = Math.max(minH, Math.min(maxH, Math.floor(H - rest)));
     if (stage.offsetHeight !== h) root.style.setProperty("--stage-h", h + "px");
     stage.classList.toggle("pin", rest + h > H + 1 && h <= H * 0.5);
   }
+
+  // ---------- on-render controls (HUD) ----------
+  // The controls you use while watching the car live on the render when the
+  // stage is wide enough; below that width the glass would cover the car, so
+  // the classic layout stays. The live elements are MOVED (handlers, ids and
+  // render functions untouched) and put back exactly where they were.
+  // Preview flag until approved: ?hud=1 on, ?hud=0 off.
+  const HUD_DEFAULT = false;
+  const HUD_WANTED = qs.get("hud") === "1" || (HUD_DEFAULT && qs.get("hud") !== "0");
+  const HUD_MIN_W = 620;
+  const HUD_PARTS = [["vehTabs", "vehicles"], ["modeSwitch", "mode"], ["paints", "paints"], ["envTabs", "studio"],
+    ["zoneBar", "zones"], ["shadeChips", "shades"], ["ppfCover", "cover"], ["holdCompare", "hold"]];
+  const hudHome = new Map(); // element -> placeholder at its normal spot
+  var hudOn = false; // var: fitEmbed reads it before this block runs
+  function hudSlot(name) { return $("hud").querySelector(`[data-slot="${name}"]`); }
+  function syncHud() {
+    const frame = $("stageFrame"), hud = $("hud");
+    if (!frame || !hud) return;
+    const want = HUD_WANTED && MODE_3D && S.space === "vehicles" && frame.clientWidth >= HUD_MIN_W;
+    if (want !== hudOn) {
+      hudOn = want;
+      document.body.classList.toggle("hud-on", want);
+      hud.hidden = !want;
+      const emptied = new Set();
+      HUD_PARTS.forEach(([id, slot]) => {
+        const el = $(id);
+        if (!el) return;
+        if (want) {
+          const ph = document.createComment("hud:" + id);
+          el.before(ph);
+          hudHome.set(el, ph);
+          hudSlot(slot).appendChild(el);
+          emptied.add(ph.parentNode.closest(".card") || ph.parentNode.closest(".group") || ph.parentNode);
+        } else {
+          const ph = hudHome.get(el);
+          if (ph) { ph.after(el); ph.remove(); hudHome.delete(el); }
+        }
+      });
+      // the cards / tool groups those controls came from have nothing left to show
+      document.querySelectorAll(".hud-emptied").forEach((n) => n.classList.remove("hud-emptied"));
+      emptied.forEach((n) => { if (n && !n.classList.contains("panel")) n.classList.add("hud-emptied"); });
+      // the coverage note still explains the film: it moves to the film card
+      const note = $("ppfCoverNote");
+      if (note) {
+        if (want) { note.before(hudNotePh); $("ppfKind").after(note); note.classList.add("hud-note"); }
+        else if (hudNotePh.parentNode) { hudNotePh.after(note); hudNotePh.remove(); note.classList.remove("hud-note"); }
+      }
+      const tools = document.querySelector(".stage-tools");
+      tools.classList.toggle("hud-emptied", want && ![...tools.children].some((g) => !g.classList.contains("hud-emptied") && g.style.display !== "none"));
+      closeStudio();
+    }
+    if (hudOn) hudDecor();
+    else if (window.VIEWER3D && window.VIEWER3D.setViewShift) window.VIEWER3D.setViewShift(0, 0);
+  }
+  const hudNotePh = document.createComment("hud:ppfCoverNote");
+  // the car rides a little higher so the dock sits on the floor, not the car
+  function hudDecor() {
+    const dot = $("hudStudioDot"), envs = (window.VIEWER3D && window.VIEWER3D.environments) || [];
+    const cur = envs.find((e) => e.id === (S.env || (window.VIEWER3D && window.VIEWER3D.environment)));
+    if (dot) dot.style.background = (cur && cur.swatch) || "#ccc";
+    if ($("hudStudioBtn")) $("hudStudioBtn").title = "Studio: " + ((cur && cur.name) || "");
+    const dock = $("hud").querySelector(".hud-dock"), H = $("stageFrame").clientHeight;
+    // up by half the dock (less the top bar), left by half the paint rail
+    const shift = Math.max(0, Math.min(H * 0.12, (dock.offsetHeight - 30) / 2));
+    const rail = $("hud").querySelector(".hud-rail");
+    if (window.VIEWER3D && window.VIEWER3D.setViewShift) window.VIEWER3D.setViewShift(Math.round(shift), Math.round((rail.offsetWidth + 12) / 2));
+  }
+  function closeStudio() {
+    const m = $("hudStudioMenu"), b = $("hudStudioBtn");
+    if (m) m.hidden = true;
+    if (b) b.setAttribute("aria-expanded", "false");
+  }
+  if ($("hudStudioBtn")) {
+    $("hudStudioBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const m = $("hudStudioMenu"), open = m.hidden;
+      m.hidden = !open;
+      $("hudStudioBtn").setAttribute("aria-expanded", String(open));
+    });
+    $("hudStudioMenu").addEventListener("click", (e) => { e.stopPropagation(); if (e.target.closest(".veh-btn")) setTimeout(closeStudio, 120); });
+    document.addEventListener("click", closeStudio);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeStudio(); });
+  }
+  if (window.ResizeObserver && $("stageFrame")) new ResizeObserver(() => syncHud()).observe($("stageFrame"));
 
   // ---------- boot ----------
   const def = BRAND.defaultShade; // {seriesIdx, vlt, sku} optional
