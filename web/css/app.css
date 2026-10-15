@@ -469,21 +469,34 @@ html.embed .panel footer { max-width: none; padding: 2px 2px 6px; }
 /* a narrow stage has no room for the hint beside the model credit, and a
    narrow control column has no room for four spec tiles in a row */
 @media (max-width: 999px) { html.embed .stage-hint { display: none; } }
-@media (min-width: 760px) and (max-width: 1099px) { html.embed .specs { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 760px) and (max-width: 1099px) { html.embed:not(.embed-stack) .specs { grid-template-columns: repeat(2, 1fr); } }
 
-/* narrow frames (phones): one column that scrolls, with the car pinned on top */
-@media (max-width: 759px) {
-  html.embed main { display: block; overflow-y: auto; padding: 8px; }
-  html.embed .stage-wrap { display: contents; }
-  html.embed .stage {
-    position: sticky; top: 0; z-index: 6; height: min(46vh, 64vw);
-    border-radius: var(--radius, 10px); box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5);
-  }
-  html.embed .stage-tools {
-    margin: 10px 0 12px; padding: 12px; background: var(--panel-bg, #fff);
-    border-radius: var(--radius, 10px); border: 1px solid var(--card-border, transparent);
-  }
-  html.embed .panel { height: auto; overflow: visible; padding-right: 0; }
-  html.embed .mode-switch { position: static; box-shadow: none; }
+/* stacked frames — phones, or a frame taller than it is wide (a brand page
+   that sizes the iframe for the whole tool, e.g. height=1650): the car on top,
+   its tools under it, then the cards in a grid of 1-3 columns with the two
+   that matter most (film + shade, or film + coverage) side by side first.
+   app.js fitEmbed() sizes the stage to fill the frame's spare height and pins
+   it when the content has to scroll. */
+html.embed.embed-stack main { display: block; overflow-y: auto; padding: 10px; }
+html.embed.embed-stack .stage-wrap { display: contents; }
+html.embed.embed-stack .stage {
+  height: var(--stage-h, 56.25vw); border-radius: var(--radius, 10px);
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5);
+}
+html.embed.embed-stack .stage.pin { position: sticky; top: 0; z-index: 6; }
+html.embed.embed-stack .stage-tools {
+  margin: 10px 0 12px; padding: 12px 14px; background: var(--panel-bg, #fff);
+  border-radius: var(--radius, 10px); border: 1px solid var(--card-border, transparent);
+  box-shadow: var(--card-shadow, 0 2px 14px rgba(0,0,0,.08));
+}
+html.embed.embed-stack .panel {
+  display: grid; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+  align-items: stretch; gap: 12px; height: auto; overflow: visible; padding-right: 0;
+}
+html.embed.embed-stack .panel > .mode-switch,
+html.embed.embed-stack .panel > footer { grid-column: 1 / -1; }
+html.embed.embed-stack .mode-switch { position: static; box-shadow: none; margin: 0; }
+html.embed.embed-stack .specs { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 560px) { html.embed.embed-stack .specs { grid-template-columns: repeat(2, 1fr); } }
 }
 

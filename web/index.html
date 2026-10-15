@@ -15,10 +15,16 @@
     (function () {
       var q = new URLSearchParams(location.search).get("embed"), framed;
       try { framed = window.self !== window.top; } catch (e) { framed = true; }
-      if (q === "1" || (framed && q !== "0")) document.documentElement.classList.add("embed");
+      if (q === "1" || (framed && q !== "0")) {
+        var w = window.innerWidth, h = window.innerHeight;
+        // screen-shaped frames get car | controls side by side; tall or narrow
+        // ones (phones, or a brand page that sizes the frame for the whole
+        // tool) get the car on top with the controls beneath (app.js fitEmbed)
+        document.documentElement.className += " embed" + (w >= 760 && h <= w * 1.1 ? "" : " embed-stack");
+      }
     })();
   </script>
-  <link rel="stylesheet" href="css/app.css?rel=77">
+  <link rel="stylesheet" href="css/app.css?rel=78">
 </head>
 <body>
   <header>
@@ -189,8 +195,8 @@
   <script src="js/photoviz.js?rel=65"></script>
   <script src="js/bsavings.js?rel=68"></script>
   <script src="js/brands.js?rel=69"></script>
-  <script src="js/intro.js?rel=77"></script>
+  <script src="js/intro.js?rel=78"></script>
   <script src="js/savings.js?rel=62"></script>
-  <script src="js/app.js?rel=80"></script>
+  <script src="js/app.js?rel=81"></script>
 </body>
 </html>

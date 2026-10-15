@@ -1138,7 +1138,37 @@
   $("disclaimer").textContent = VEHICLE_DISCLAIMER;
   // embedded: the page itself doesn't scroll, so the fine print rides at the
   // end of the control column instead of below it
-  if (document.documentElement.classList.contains("embed")) document.querySelector(".panel").appendChild($("disclaimer"));
+  if (document.documentElement.classList.contains("embed")) {
+    document.querySelector(".panel").appendChild($("disclaimer"));
+    fitEmbed();
+    window.addEventListener("resize", fitEmbed);
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => fitEmbed());
+      ro.observe(document.querySelector(".panel"));
+      ro.observe(document.querySelector(".stage-tools"));
+    }
+  }
+
+  // Embedded layout, re-decided whenever the frame or the content changes:
+  // side by side in a screen-shaped frame; stacked otherwise, with the stage
+  // taking whatever height the controls leave free (between a 16:9-ish band
+  // and a cap, so a 1650px frame doesn't turn into a 1600px-tall car), pinned
+  // to the top of the frame when the content has to scroll past it.
+  function fitEmbed() {
+    const root = document.documentElement, W = window.innerWidth, H = window.innerHeight;
+    const stack = !(W >= 760 && H <= W * 1.1);
+    root.classList.toggle("embed-stack", stack);
+    const stage = $("stage"), panel = document.querySelector(".panel");
+    if (!stack) { root.style.removeProperty("--stage-h"); stage.classList.remove("pin"); return; }
+    root.style.setProperty("--cols", W < 700 ? 1 : W < 1100 ? 2 : 3);
+    const main = document.querySelector("main"), cs = getComputedStyle(main);
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const rest = panel.getBoundingClientRect().bottom - stage.getBoundingClientRect().bottom + pad;
+    const minH = Math.round(Math.min(W * 0.6, H * 0.5)), maxH = Math.round(Math.min(W * 0.78, H * 0.6));
+    const h = Math.max(minH, Math.min(maxH, Math.floor(H - rest)));
+    if (stage.offsetHeight !== h) root.style.setProperty("--stage-h", h + "px");
+    stage.classList.toggle("pin", rest + h > H + 1 && h <= H * 0.5);
+  }
 
   // ---------- boot ----------
   const def = BRAND.defaultShade; // {seriesIdx, vlt, sku} optional

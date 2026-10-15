@@ -815,7 +815,7 @@
 
   if (glass) {
     var placeGlass = function () {
-      var vw = window.innerWidth, vh = window.innerHeight;
+      var vw = el.clientWidth || window.innerWidth, vh = el.clientHeight || window.innerHeight; // the overlay may be a slice of a tall frame
       var set = el.querySelector(".bi-set");
       var lock = set && set.querySelector(".bi-lock");
       if (!lock) return;
@@ -855,14 +855,14 @@
     var placeBlade = function () {
       var mw = el.querySelector(".bi-set .bi-markwrap");
       if (!mw) return;
-      var r = mw.getBoundingClientRect();
-      var vw = window.innerWidth, vh = window.innerHeight;
-      var cy = r.top + r.height * 0.53;                 // strike sits at 53% of the mark
+      var r = mw.getBoundingClientRect(), o = el.getBoundingClientRect(); // overlay-relative: it may be a slice of a tall frame
+      var vw = o.width || window.innerWidth, vh = o.height || window.innerHeight;
+      var cy = r.top - o.top + r.height * 0.53;         // strike sits at 53% of the mark
       var ext = r.width * 0.03;                         // strike overhangs the letters ~3%
       el.style.setProperty("--cy", (cy / vh * 100).toFixed(3) + "%");
       el.style.setProperty("--bh", Math.max(2, r.height * 0.022).toFixed(2) + "px");
-      el.style.setProperty("--sl", Math.max(0, r.left - ext).toFixed(1) + "px");
-      el.style.setProperty("--sr", Math.max(0, vw - r.right - ext).toFixed(1) + "px");
+      el.style.setProperty("--sl", Math.max(0, r.left - o.left - ext).toFixed(1) + "px");
+      el.style.setProperty("--sr", Math.max(0, o.right - r.right - ext).toFixed(1) + "px");
     };
     placeBlade();
     window.addEventListener("resize", placeBlade);
@@ -890,7 +890,23 @@
   // frame is really on screen: most of it, or a solid 420px of it.
   // IntersectionObserver measures against the top-level viewport even from a
   // cross-origin iframe; a top-level page (overlay = viewport) passes at once.
-  var inView = false, viewWaiters = [];
+  var inView = false, viewWaiters = [], vis = null;
+  // A frame much taller than any screen (a brand page that sizes the iframe
+  // for the whole tool, e.g. height=1650) would centre the logo below the
+  // fold. Play it in the part of the frame that is on screen instead: the
+  // overlay shrinks to that band and a plain cover keeps the rest dark.
+  var cover = null;
+  function fitToView() {
+    var H = window.innerHeight;
+    if (!vis || H < 1000 || vis.h >= H * 0.9) return;
+    var bh = Math.min(H, Math.max(640, Math.min(900, vis.h)));
+    var top = Math.max(0, Math.min(H - bh, vis.top));
+    cover = document.createElement("div");
+    cover.style.cssText = "position:fixed;inset:0;z-index:9998;background:" + bg + ";transition:opacity .5s ease";
+    document.documentElement.appendChild(cover);
+    el.style.top = top + "px"; el.style.bottom = "auto"; el.style.height = bh + "px";
+    window.dispatchEvent(new Event("resize")); // glass / blade / speed layers re-measure the band
+  }
   function whenInView(fn) { if (inView) fn(); else viewWaiters.push(fn); }
   if ("IntersectionObserver" in window) {
     var steps = [];
@@ -898,6 +914,7 @@
     var io = new IntersectionObserver(function (entries) {
       var e = entries[entries.length - 1];
       var h = e.boundingClientRect.height || window.innerHeight;
+      if (e.isIntersecting) vis = { top: e.intersectionRect.top, h: e.intersectionRect.height };
       if (!e.isIntersecting || inView) return;
       if (e.intersectionRatio < 0.6 && e.intersectionRect.height < Math.min(420, h * 0.95)) return;
       inView = true;
@@ -952,6 +969,7 @@
   function finish() {
     el.remove();
     css.remove();
+    if (cover) cover.remove();
   }
   function dismiss() {
     if (done) return;
@@ -963,6 +981,7 @@
     document.documentElement.classList.add("zt-enter");
     setTimeout(function () { document.documentElement.classList.remove("zt-enter"); }, 1600);
     el.classList.add("bi-exit");
+    if (cover) cover.style.opacity = "0";
     setTimeout(finish, reduced ? 380 : T.exitDur * 1000 + 60);
   }
 
@@ -1014,6 +1033,7 @@
     var start = function () {
       if (started) return;
       started = true;
+      fitToView();
       el.classList.remove("bi-hold");
       if (fx) fx.start();
       if (!done) setTimeout(dismiss, T.exit * 1000);
